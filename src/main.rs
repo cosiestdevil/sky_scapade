@@ -1,9 +1,7 @@
 use std::time::Duration;
 
 use bevy::{
-    prelude::*,
-    window::PresentMode,
-    winit::{UpdateMode, WinitSettings},
+    prelude::*, window::PresentMode, winit::{UpdateMode, WinitSettings}
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_framepace::{FramepaceSettings, Limiter};
@@ -11,11 +9,12 @@ use bevy_obj::ObjPlugin;
 use iyes_perf_ui::PerfUiPlugin;
 
 mod menu;
+mod generate;
 
 const GAME_NAME:&str = "Cosiest";
 fn main() {
-    App::new()
-        .add_plugins(
+    let mut app = App::new();
+        app.add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
@@ -52,9 +51,14 @@ fn main() {
             Update,
             temp,
         )
-        
-        .run();
+        ;
+        let mut temp = generate::Generator::new(1,256,64,5);
+        temp.get_height(0);
+        app.run();
 }
+
+
+
 #[derive(Component)]
 struct SafeUi;
 trait UiHelper {
