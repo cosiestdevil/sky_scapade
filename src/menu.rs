@@ -388,9 +388,9 @@ fn enter_main_menu(safe_ui: Query<Entity, With<crate::SafeUi>>, mut commands: Co
         });
     }
 }
-fn exit_main_menu(main_menu: Query<Entity, With<MainMenu>>, mut commands: Commands) {
-    let main_menu = main_menu.get_single();
-    if let Ok(main_menu) = main_menu {
+fn exit_main_menu(main_menu: Query<Entity, Or<(With<MainMenu>,With<MenuBackground>)>>, mut commands: Commands) {
+    let main_menu = main_menu.iter();
+    for main_menu in main_menu {
         commands.entity(main_menu).despawn_recursive();
     }
 }

@@ -19,7 +19,7 @@ bevy_obj = "0.13"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 splines = "4.3.1"
-
+bevy_rapier3d = { version = "*", features = [ "simd-stable", "debug-render-3d" ] }
 
 
 # Enable a small amount of optimization in debug mode

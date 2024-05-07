@@ -1,7 +1,9 @@
+use bevy_ecs::system::Resource;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use splines::{Interpolation, Key, Spline};
 
+#[derive(Resource,Clone)]
 pub struct Generator {
     height_rng: ChaCha20Rng,
     height_wave_length: u64,

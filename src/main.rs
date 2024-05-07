@@ -1,63 +1,92 @@
 use std::time::Duration;
 
 use bevy::{
-    prelude::*, window::PresentMode, winit::{UpdateMode, WinitSettings}
+    prelude::*,
+    window::PresentMode,
+    winit::{UpdateMode, WinitSettings},
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_framepace::{FramepaceSettings, Limiter};
 use bevy_obj::ObjPlugin;
+use bevy_rapier3d::prelude::*;
 use iyes_perf_ui::PerfUiPlugin;
-
-mod menu;
 mod generate;
+mod menu;
 
-const GAME_NAME:&str = "Cosiest";
+const GAME_NAME: &str = "Cosiest";
 fn main() {
     let mut app = App::new();
-        app.add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: GAME_NAME.into(),
-                        //resolution: (2560.0, 1080.0).into(),
-                        resolution:(1280.,720.).into(),
-                        name: Some("new_game_1.app".into()),
-                        present_mode: PresentMode::Mailbox,
-                        ..default()
-                    }),
+    app.add_plugins(
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: GAME_NAME.into(),
+                    //resolution: (2560.0, 1080.0).into(),
+                    resolution: (1280., 720.).into(),
+                    name: Some("new_game_1.app".into()),
+                    present_mode: PresentMode::Mailbox,
                     ..default()
-                })
-                .set(ImagePlugin::default_nearest()),
-        )
-        .insert_resource(WinitSettings {
-            focused_mode: UpdateMode::Continuous,
-            unfocused_mode: UpdateMode::ReactiveLowPower {
-                wait: Duration::from_secs_f64(1.0 / 30.0), //Duration::MAX
-            },
-        })
-        .add_plugins(menu::MenuPlugin)
-        .add_plugins(ObjPlugin)
-        .insert_state(AppState::MainMenu)
-        //.add_plugins(ScreenDiagnosticsPlugin::default())
-        //.add_plugins(ScreenFrameDiagnosticsPlugin)
-        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
-        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
-        //.add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin)
-        //.add_plugins(system_info::SystemInformationDiagnosticsPlugin)
-        .add_plugins(bevy_framepace::FramepacePlugin)
-        .add_plugins(PerfUiPlugin)
-        .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            temp,
-        )
-        ;
-        let mut temp = generate::Generator::new(1,256,64,5);
-        temp.get_height(0);
-        app.run();
+                }),
+                ..default()
+            })
+            .set(ImagePlugin::default_nearest()),
+    )
+    .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+    .add_plugins(RapierDebugRenderPlugin::default())
+    .insert_resource(WinitSettings {
+        focused_mode: UpdateMode::Continuous,
+        unfocused_mode: UpdateMode::ReactiveLowPower {
+            wait: Duration::from_secs_f64(1.0 / 30.0), //Duration::MAX
+        },
+    })
+    .add_plugins(menu::MenuPlugin)
+    .add_plugins(ObjPlugin)
+    .insert_state(AppState::MainMenu)
+    //.add_plugins(ScreenDiagnosticsPlugin::default())
+    //.add_plugins(ScreenFrameDiagnosticsPlugin)
+    .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
+    .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
+    //.add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin)
+    //.add_plugins(system_info::SystemInformationDiagnosticsPlugin)
+    .add_plugins(bevy_framepace::FramepacePlugin)
+    .add_plugins(PerfUiPlugin)
+    .add_systems(Startup, setup)
+    .add_systems(Update, temp);
+    app.add_systems(OnEnter(AppState::InGame), (start_level));
+    app.run();
 }
 
+fn start_level(mut commands: Commands, mut camera: Query<(Entity, &mut Transform), With<Camera>>) {
+    let mut generator = generate::Generator::new(1, 256, 64, 5);
+    commands.insert_resource(generator.clone());
 
+    let hy = (generator.get_height(0) * 10.) as f32;
+    commands
+        .spawn(Collider::cuboid(10.0, 10., 10.))
+        .insert(TransformBundle::from_transform(Transform::from_xyz(
+            0., hy, 0.,
+        )));
+    let player = commands
+        .spawn(Collider::capsule_y(20., 5.))
+        .insert(RigidBody::Dynamic)
+        .insert(LockedAxes::ROTATION_LOCKED)
+        .insert(TransformBundle::from(Transform::from_xyz(15., hy+35., 0.))).id();
+    if let Ok((camera, mut camera_transform)) = camera.get_single_mut() {
+        // =
+        commands.entity(camera).set_parent(player);
+        *camera_transform=Transform::from_xyz(0.0, 50., 200.0).looking_at(Vec3::new(0., 25.0, 0.), Vec3::Y)
+    }
+    for x in 1..256 {
+        let hy = (generator.get_height(x) * 10.) as f32;
+        commands
+            .spawn(Collider::cuboid(10.0, 10., 10.))
+            .insert(TransformBundle::from_transform(Transform::from_xyz(
+                (x as f32) * 20.,
+                hy,
+                0.,
+            )));
+    }
+}
 
 #[derive(Component)]
 struct SafeUi;
@@ -92,19 +121,14 @@ impl UiHelper for ChildBuilder<'_> {
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut frame_pace_settings: ResMut<FramepaceSettings>,
-) {
+fn setup(mut commands: Commands, mut frame_pace_settings: ResMut<FramepaceSettings>) {
     frame_pace_settings.limiter = Limiter::Off;
     // spawn a camera to be able to see anything
     commands.spawn(Camera3dBundle {
         transform: Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::new(0., 0.0, 0.), Vec3::Y),
         ..default()
     });
-    
 
-    
     // create a simple Perf UI with default settings
     // and all entries provided by the crate:
     // commands.spawn((
@@ -185,9 +209,6 @@ fn temp(
         }
     }
 }
-
-
-
 
 mod system_info {
     use bevy::prelude::*;
