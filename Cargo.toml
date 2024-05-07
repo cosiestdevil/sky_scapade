@@ -20,6 +20,9 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 splines = "4.3.1"
 bevy_rapier3d = { version = "*", features = [ "simd-stable", "debug-render-3d" ] }
+leafwing-input-manager = "0.13.3"
+bevy-tnua-rapier3d = "0.6.0"
+bevy-tnua = "0.17.0"
 
 
 # Enable a small amount of optimization in debug mode

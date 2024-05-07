@@ -1,5 +1,4 @@
 use std::time::Duration;
-
 use bevy::{
     prelude::*,
     window::PresentMode,
@@ -9,10 +8,13 @@ use bevy_ecs::system::EntityCommands;
 use bevy_framepace::{FramepaceSettings, Limiter};
 use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
+use bevy_tnua::{builtins::{TnuaBuiltinJump, TnuaBuiltinWalk}, controller::{TnuaController, TnuaControllerBundle, TnuaControllerPlugin}};
+use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
 use iyes_perf_ui::PerfUiPlugin;
+use leafwing_input_manager::{action_state::ActionState, input_map::InputMap, plugin::InputManagerPlugin, InputManagerBundle};
 mod generate;
 mod menu;
-
+mod input;
 const GAME_NAME: &str = "Cosiest";
 fn main() {
     let mut app = App::new();
@@ -52,9 +54,35 @@ fn main() {
     .add_plugins(PerfUiPlugin)
     .add_systems(Startup, setup)
     .add_systems(Update, temp);
+app .add_plugins(InputManagerPlugin::<input::Action>::default());
+    app.add_plugins(( TnuaControllerPlugin::default(),TnuaRapier3dPlugin::default()));
     app.add_systems(OnEnter(AppState::InGame), (start_level));
+    app.add_systems(Update,(move_player).run_if(in_state(AppState::InGame)));
     app.run();
 }
+
+fn move_player(mut query: Query<(&ActionState<input::Action>,&mut TnuaController), With<input::Player>>) {
+    let (action_state,mut controller) = query.single_mut();
+    // Each action has a button-like state of its own that you can check
+    //println!("move_player {:?}",action_state);
+    let mut direction = Vec3::ZERO;
+    if action_state.pressed(&input::Action::Left){
+        direction -= Vec3::X;
+    }
+    if action_state.pressed(&input::Action::Right) {
+        direction += Vec3::X;
+    }
+    controller.basis(TnuaBuiltinWalk {
+        desired_velocity: direction.normalize_or_zero() * 100.0,
+        desired_forward:direction.normalize_or_zero(),
+        float_height:15.,
+        ..Default::default()
+    });
+    if action_state.pressed(&input::Action::Jump) {
+        controller.action(TnuaBuiltinJump{height:50.,..default()});
+    }
+}
+
 
 fn start_level(mut commands: Commands, mut camera: Query<(Entity, &mut Transform), With<Camera>>) {
     let mut generator = generate::Generator::new(1, 256, 64, 5);
@@ -66,8 +94,14 @@ fn start_level(mut commands: Commands, mut camera: Query<(Entity, &mut Transform
         .insert(TransformBundle::from_transform(Transform::from_xyz(
             0., hy, 0.,
         )));
+    let input_map = InputMap::new([(input::Action::Jump, KeyCode::Space),(input::Action::Left,KeyCode::KeyA),(input::Action::Right,KeyCode::KeyD)]);
     let player = commands
-        .spawn(Collider::capsule_y(20., 5.))
+        .spawn(Collider::capsule_y(10., 5.))
+        .insert(TnuaRapier3dSensorShape(Collider::capsule_y(10., 5.)))
+        .insert(TnuaControllerBundle::default())
+        .insert(TnuaRapier3dIOBundle::default())       
+        .insert(input::Player)
+        .insert(InputManagerBundle::with_map(input_map))
         .insert(RigidBody::Dynamic)
         .insert(LockedAxes::ROTATION_LOCKED)
         .insert(TransformBundle::from(Transform::from_xyz(15., hy+35., 0.))).id();

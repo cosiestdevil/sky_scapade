@@ -18,7 +18,7 @@ impl Generator {
         height_amplitude: u64,
         height_octaves: u64,
     ) -> Self {
-        let rng = ChaCha20Rng::seed_from_u64(seed);
+        let rng = ChaCha20Rng::from_entropy();
         let mut height_rng = rng.clone();
         height_rng.set_stream(1);
         Self {
