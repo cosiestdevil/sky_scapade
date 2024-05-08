@@ -294,22 +294,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "bevy"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65b9eadaacf8fe971331bc3f250f35c18bc9dace3f96b483062f38ac07e3a1b4"
 dependencies = [
  "bevy_internal",
-]
-
-[[package]]
-name = "bevy-parallax"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48a8d8b7d4152965e1890c88fca2b066df3599df1574a189d62ed9cedac7d6cd"
-dependencies = [
- "bevy",
- "serde",
 ]
 
 [[package]]
@@ -625,7 +621,7 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21ecf404295055deb7fe037495891bc135ca10d46bc5b6c55f9ab7b7ebc61d31"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "bevy_animation",
  "bevy_app",
  "bevy_asset",
@@ -1516,6 +1512,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f01585027057ff5f0a5bf276174ae4c1594a2c5bde93d5f46a016d76270f5a9"
 dependencies = [
  "bindgen",
+]
+
+[[package]]
+name = "cosiest_noisiest"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "num-integer",
+ "rand",
+ "rand_chacha",
+ "splines",
 ]
 
 [[package]]
@@ -2604,8 +2611,8 @@ dependencies = [
 name = "new_game_1"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "bevy",
- "bevy-parallax",
  "bevy-tnua",
  "bevy-tnua-rapier3d",
  "bevy_diagnostic",
@@ -2613,6 +2620,7 @@ dependencies = [
  "bevy_framepace",
  "bevy_obj",
  "bevy_rapier3d",
+ "cosiest_noisiest",
  "iyes_perf_ui",
  "leafwing-input-manager",
  "rand",
@@ -3257,7 +3265,7 @@ version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b91f7eff05f748767f183df4320a63d6936e9c6107d97c9e6bdd9784f4289c94"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "bitflags 2.5.0",
  "serde",
  "serde_derive",

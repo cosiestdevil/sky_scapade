@@ -15,7 +15,6 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.insert_state(MainMenuState::Menu);
         app.insert_resource(FrameLimitResource(FrameLimitOption::Off));
-        app.add_systems(Startup,setup);
         app.add_systems(
             Update,
             (main_menu_button_system, settings_menu_button_system),
@@ -31,146 +30,6 @@ impl Plugin for MenuPlugin {
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let menu_back_image: Handle<Image> =
-        asset_server.load_with_settings("cyberpunk_back.png", |s: &mut ImageLoaderSettings| {
-            match &mut s.sampler {
-                ImageSampler::Default => {
-                    s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                        address_mode_u: ImageAddressMode::Repeat,
-                        address_mode_v: ImageAddressMode::Repeat,
-                        ..default()
-                    });
-                }
-                ImageSampler::Descriptor(sampler) => {
-                    sampler.address_mode_u = ImageAddressMode::Repeat;
-                    sampler.address_mode_v = ImageAddressMode::Repeat;
-                }
-            }
-        });
-    let background_material = materials.add(StandardMaterial {
-        base_color_texture: Some(menu_back_image.clone()),
-        cull_mode: Some(Face::Front),
-        double_sided: true,
-        unlit: true,
-        ..default()
-    });
-    let menu_middle_image: Handle<Image> =
-        asset_server.load_with_settings("cyberpunk_middle.png", |s: &mut ImageLoaderSettings| {
-            match &mut s.sampler {
-                ImageSampler::Default => {
-                    s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                        address_mode_u: ImageAddressMode::Repeat,
-                        address_mode_v: ImageAddressMode::Repeat,
-                        ..default()
-                    });
-                }
-                ImageSampler::Descriptor(sampler) => {
-                    sampler.address_mode_u = ImageAddressMode::Repeat;
-                    sampler.address_mode_v = ImageAddressMode::Repeat;
-                }
-            }
-        });
-    let middle_material = materials.add(StandardMaterial {
-        base_color_texture: Some(menu_middle_image.clone()),
-        cull_mode: Some(Face::Front),
-        alpha_mode: AlphaMode::Mask(0.0),
-        double_sided: true,
-        unlit: true,
-        ..default()
-    });
-    let menu_front_image: Handle<Image> =
-        asset_server.load_with_settings("cyberpunk_front.png", |s: &mut ImageLoaderSettings| {
-            match &mut s.sampler {
-                ImageSampler::Default => {
-                    s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                        address_mode_u: ImageAddressMode::Repeat,
-                        address_mode_v: ImageAddressMode::Repeat,
-                        ..default()
-                    });
-                }
-                ImageSampler::Descriptor(sampler) => {
-                    sampler.address_mode_u = ImageAddressMode::Repeat;
-                    sampler.address_mode_v = ImageAddressMode::Repeat;
-                }
-            }
-        });
-    let front_material = materials.add(StandardMaterial {
-        base_color_texture: Some(menu_front_image.clone()),
-        cull_mode: Some(Face::Front),
-        alpha_mode: AlphaMode::Mask(0.0),
-        double_sided: true,
-        unlit: true,
-        ..default()
-    });
-    let cylinder: Handle<Mesh> = asset_server.load("hollow_cylinder.obj");
-    commands
-        .spawn((
-            MenuBackground,
-            TransformBundle::default(),
-            VisibilityBundle::default(),
-        ))
-        .with_children(|menu_background| {
-            menu_background.spawn(PointLightBundle {
-                point_light: PointLight {
-                    shadows_enabled: true,
-                    intensity: 10_000_000.,
-                    range: 100.0,
-                    ..default()
-                },
-                transform: Transform::from_xyz(0.0, 6.0, 6.0),
-                ..default()
-            });
-            menu_background.spawn((
-                PbrBundle {
-                    mesh: cylinder.clone(),
-                    material: background_material.clone(),
-                    transform: Transform::from_xyz(0.0, 1.0, 0.0)
-                        //.with_rotation(Quat::from_rotation_x(PI))
-                        .with_scale(Vec3::from_parts([25.0, 10.0, 25.0])),
-                    ..default()
-                },
-                BackgroundLayerComponent(BackgroundLayer::Background),
-            ));
-            menu_background.spawn((
-                PbrBundle {
-                    mesh: cylinder.clone(),
-                    material: middle_material.clone(),
-                    transform: Transform::from_xyz(0.0, 1.0, 1.0)
-                        //.with_rotation(Quat::from_rotation_x(PI))
-                        .with_scale(Vec3::from_parts([18.0, 8.0, 18.0])),
-                    ..default()
-                },
-                BackgroundLayerComponent(BackgroundLayer::BackMiddle),
-            ));
-            menu_background.spawn((
-                PbrBundle {
-                    mesh: cylinder.clone(),
-                    material: middle_material.clone(),
-                    transform: Transform::from_xyz(0.0, 0.0, 0.0)
-                        .with_rotation(Quat::from_rotation_y(PI / 16.))
-                        .with_scale(Vec3::from_parts([12.0, 5.0, 12.0])),
-                    ..default()
-                },
-                BackgroundLayerComponent(BackgroundLayer::Middle),
-            ));
-            menu_background.spawn((
-                PbrBundle {
-                    mesh: cylinder.clone(),
-                    material: front_material.clone(),
-                    transform: Transform::from_xyz(0.0, 0.0, 0.0)
-                        //.with_rotation(Quat::from_rotation_x(PI))
-                        .with_scale(Vec3::from_parts([6.0, 2.5, 6.0])),
-                    ..default()
-                },
-                BackgroundLayerComponent(BackgroundLayer::Foreground),
-            ));
-        });
-}
 
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MainMenuState {
@@ -340,10 +199,146 @@ fn get_main_menu_menu_bundle() -> NodeBundle {
         ..default()
     }
 }
-fn enter_main_menu(safe_ui: Query<Entity, With<crate::SafeUi>>, mut commands: Commands) {
+fn enter_main_menu(safe_ui: Query<Entity, With<crate::SafeUi>>, mut commands: Commands, asset_server: Res<AssetServer>,
+    mut materials: ResMut<Assets<StandardMaterial>>,) {
+    let menu_back_image: Handle<Image> =
+        asset_server.load_with_settings("cyberpunk_back.png", |s: &mut ImageLoaderSettings| {
+            match &mut s.sampler {
+                ImageSampler::Default => {
+                    s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                        address_mode_u: ImageAddressMode::Repeat,
+                        address_mode_v: ImageAddressMode::Repeat,
+                        ..default()
+                    });
+                }
+                ImageSampler::Descriptor(sampler) => {
+                    sampler.address_mode_u = ImageAddressMode::Repeat;
+                    sampler.address_mode_v = ImageAddressMode::Repeat;
+                }
+            }
+        });
+    let background_material = materials.add(StandardMaterial {
+        base_color_texture: Some(menu_back_image.clone()),
+        cull_mode: Some(Face::Front),
+        double_sided: true,
+        unlit: true,
+        ..default()
+    });
+    let menu_middle_image: Handle<Image> =
+        asset_server.load_with_settings("cyberpunk_middle.png", |s: &mut ImageLoaderSettings| {
+            match &mut s.sampler {
+                ImageSampler::Default => {
+                    s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                        address_mode_u: ImageAddressMode::Repeat,
+                        address_mode_v: ImageAddressMode::Repeat,
+                        ..default()
+                    });
+                }
+                ImageSampler::Descriptor(sampler) => {
+                    sampler.address_mode_u = ImageAddressMode::Repeat;
+                    sampler.address_mode_v = ImageAddressMode::Repeat;
+                }
+            }
+        });
+    let middle_material = materials.add(StandardMaterial {
+        base_color_texture: Some(menu_middle_image.clone()),
+        cull_mode: Some(Face::Front),
+        alpha_mode: AlphaMode::Mask(0.0),
+        double_sided: true,
+        unlit: true,
+        ..default()
+    });
+    let menu_front_image: Handle<Image> =
+        asset_server.load_with_settings("cyberpunk_front.png", |s: &mut ImageLoaderSettings| {
+            match &mut s.sampler {
+                ImageSampler::Default => {
+                    s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                        address_mode_u: ImageAddressMode::Repeat,
+                        address_mode_v: ImageAddressMode::Repeat,
+                        ..default()
+                    });
+                }
+                ImageSampler::Descriptor(sampler) => {
+                    sampler.address_mode_u = ImageAddressMode::Repeat;
+                    sampler.address_mode_v = ImageAddressMode::Repeat;
+                }
+            }
+        });
+    let front_material = materials.add(StandardMaterial {
+        base_color_texture: Some(menu_front_image.clone()),
+        cull_mode: Some(Face::Front),
+        alpha_mode: AlphaMode::Mask(0.0),
+        double_sided: true,
+        unlit: true,
+        ..default()
+    });
+    let cylinder: Handle<Mesh> = asset_server.load("hollow_cylinder.obj");
+    commands
+        .spawn((
+            MenuBackground,
+            TransformBundle::default(),
+            VisibilityBundle::default(),
+        ))
+        .with_children(|menu_background| {
+            menu_background.spawn(PointLightBundle {
+                point_light: PointLight {
+                    shadows_enabled: true,
+                    intensity: 10_000_000.,
+                    range: 100.0,
+                    ..default()
+                },
+                transform: Transform::from_xyz(0.0, 6.0, 6.0),
+                ..default()
+            });
+            menu_background.spawn((
+                PbrBundle {
+                    mesh: cylinder.clone(),
+                    material: background_material.clone(),
+                    transform: Transform::from_xyz(0.0, 1.0, 0.0)
+                        //.with_rotation(Quat::from_rotation_x(PI))
+                        .with_scale(Vec3::from_parts([25.0, 10.0, 25.0])),
+                    ..default()
+                },
+                BackgroundLayerComponent(BackgroundLayer::Background),
+            ));
+            menu_background.spawn((
+                PbrBundle {
+                    mesh: cylinder.clone(),
+                    material: middle_material.clone(),
+                    transform: Transform::from_xyz(0.0, 1.0, 1.0)
+                        //.with_rotation(Quat::from_rotation_x(PI))
+                        .with_scale(Vec3::from_parts([18.0, 8.0, 18.0])),
+                    ..default()
+                },
+                BackgroundLayerComponent(BackgroundLayer::BackMiddle),
+            ));
+            menu_background.spawn((
+                PbrBundle {
+                    mesh: cylinder.clone(),
+                    material: middle_material.clone(),
+                    transform: Transform::from_xyz(0.0, 0.0, 0.0)
+                        .with_rotation(Quat::from_rotation_y(PI / 16.))
+                        .with_scale(Vec3::from_parts([12.0, 5.0, 12.0])),
+                    ..default()
+                },
+                BackgroundLayerComponent(BackgroundLayer::Middle),
+            ));
+            menu_background.spawn((
+                PbrBundle {
+                    mesh: cylinder.clone(),
+                    material: front_material.clone(),
+                    transform: Transform::from_xyz(0.0, 0.0, 0.0)
+                        //.with_rotation(Quat::from_rotation_x(PI))
+                        .with_scale(Vec3::from_parts([6.0, 2.5, 6.0])),
+                    ..default()
+                },
+                BackgroundLayerComponent(BackgroundLayer::Foreground),
+            ));
+        });
     let safe_ui = safe_ui.get_single();
     if let Ok(safe_ui) = safe_ui {
         let mut safe_ui = commands.entity(safe_ui);
+        safe_ui.despawn_descendants();
         safe_ui.with_children(|builder| {
             builder
                 .spawn((
