@@ -2,10 +2,15 @@
 use base64::prelude::*;
 use bevy::{
     prelude::*,
+    render::{
+        render_asset::RenderAssetUsages,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+    },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
 };
 use bevy_ecs::system::EntityCommands;
+use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_framepace::{FramepaceSettings, Limiter};
 use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
@@ -13,7 +18,6 @@ use bevy_tnua::{
     builtins::{TnuaBuiltinJump, TnuaBuiltinWalk},
     controller::{TnuaController, TnuaControllerBundle, TnuaControllerPlugin},
 };
-use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
 use input::Player;
 use iyes_perf_ui::PerfUiPlugin;
@@ -27,8 +31,8 @@ mod menu;
 const GAME_NAME: &str = "SkyScapade";
 fn main() {
     let mut app = App::new();
-    app.add_plugins(EmbeddedAssetPlugin{
-        mode:bevy_embedded_assets::PluginMode::ReplaceDefault
+    app.add_plugins(EmbeddedAssetPlugin {
+        mode: bevy_embedded_assets::PluginMode::ReplaceDefault,
     });
     app.add_plugins(
         DefaultPlugins
@@ -45,7 +49,6 @@ fn main() {
             })
             .set(ImagePlugin::default_nearest()),
     )
-    
     .add_plugins(RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule())
     .add_plugins(RapierDebugRenderPlugin::default())
     .insert_resource(WinitSettings {
@@ -75,24 +78,40 @@ fn main() {
     app.add_systems(OnExit(AppState::InGame), cleanup_level);
     app.add_systems(OnEnter(AppState::InGame), start_level);
     app.add_systems(Update, (move_player).run_if(in_state(AppState::InGame)));
-    app.add_systems(FixedUpdate, (generate_more_if_needed).run_if(in_state(AppState::InGame)));
+    app.add_systems(
+        FixedUpdate,
+        (generate_more_if_needed).run_if(in_state(AppState::InGame)),
+    );
     app.run();
+}
+
+#[derive(Resource,Clone)]
+struct PlatformAssets {
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
 }
 
 fn generate_more_if_needed(
     mut commands: Commands,
     mut level: Query<(Entity, &mut crate::Level)>,
+    platform_assets: Res<PlatformAssets>,
     player: Query<&Transform, With<Player>>,
     mut generator: ResMut<generate::Generator>,
 ) {
     let (level_entity, mut level) = level.single_mut();
     let player_transform = player.single();
-    if (player_transform.translation.x/20.) >= level.right - 10. {
+    if (player_transform.translation.x / 20.) >= level.right - 10. {
         for x in 1..256 {
-            let x = x+(level.right as usize);
+            let x = x + (level.right as usize);
             let hy = (generator.get_height(x) * 10.) as f32;
+            let platform_assets = platform_assets.clone();
             commands
                 .spawn(Collider::cuboid(10.0, 10., 10.))
+                .insert(PbrBundle {
+                    mesh: platform_assets.mesh.clone(),
+                    material: platform_assets.material.clone(),
+                    ..default()
+                })
                 .insert(LevelFloor)
                 .insert(TransformBundle::from_transform(Transform::from_xyz(
                     (x as f32) * 20.,
@@ -100,9 +119,8 @@ fn generate_more_if_needed(
                     0.,
                 )))
                 .set_parent(level_entity);
-            
         }
-        level.right+=255.;
+        level.right += 255.;
     }
 }
 
@@ -155,8 +173,22 @@ fn start_level(
     mut commands: Commands,
     mut camera: Query<(Entity, &mut Transform), With<Camera>>,
     safe_ui: Query<Entity, With<crate::SafeUi>>,
+    asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let mut generator = generate::Generator::from_entropy(256., 64., 5);
+    let platform_mesh: Handle<Mesh> = asset_server.load("platform.obj");
+    let debug_material = materials.add(StandardMaterial {
+        base_color_texture: Some(images.add(uv_debug_texture())),
+        ..default()
+    });
+
+    let platform_assets = PlatformAssets {
+        mesh: platform_mesh.clone(),
+        material: debug_material.clone(),
+    };
+    commands.insert_resource(platform_assets);
     let safe_ui = safe_ui.get_single();
     if let Ok(safe_ui) = safe_ui {
         let mut safe_ui = commands.entity(safe_ui);
@@ -183,6 +215,11 @@ fn start_level(
     let hy = (generator.get_height(0) * 10.) as f32;
     commands
         .spawn(Collider::cuboid(10.0, 10., 10.))
+        .insert(PbrBundle {
+            mesh: platform_mesh.clone(),
+            material: debug_material.clone(),
+            ..default()
+        })
         .insert(LevelFloor)
         .insert(TransformBundle::from_transform(Transform::from_xyz(
             0., hy, 0.,
@@ -219,6 +256,11 @@ fn start_level(
         let hy = (generator.get_height(x) * 10.) as f32;
         commands
             .spawn(Collider::cuboid(10.0, 10., 10.))
+            .insert(PbrBundle {
+                mesh: platform_mesh.clone(),
+                material: debug_material.clone(),
+                ..default()
+            })
             .insert(LevelFloor)
             .insert(TransformBundle::from_transform(Transform::from_xyz(
                 (x as f32) * 20.,
@@ -228,7 +270,33 @@ fn start_level(
             .set_parent(level);
     }
 }
+fn uv_debug_texture() -> Image {
+    const TEXTURE_SIZE: usize = 8;
 
+    let mut palette: [u8; 32] = [
+        255, 102, 159, 255, 255, 159, 102, 255, 236, 255, 102, 255, 121, 255, 102, 255, 102, 255,
+        198, 255, 102, 198, 255, 255, 121, 102, 255, 255, 236, 102, 255, 255,
+    ];
+
+    let mut texture_data = [0; TEXTURE_SIZE * TEXTURE_SIZE * 4];
+    for y in 0..TEXTURE_SIZE {
+        let offset = TEXTURE_SIZE * y * 4;
+        texture_data[offset..(offset + TEXTURE_SIZE * 4)].copy_from_slice(&palette);
+        palette.rotate_right(4);
+    }
+
+    Image::new_fill(
+        Extent3d {
+            width: TEXTURE_SIZE as u32,
+            height: TEXTURE_SIZE as u32,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &texture_data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+}
 #[derive(Component)]
 struct SafeUi;
 trait UiHelper {
