@@ -9,5 +9,6 @@ pub enum Action {
 }
 #[derive(Component)]
 pub struct Player{
-    pub max_speed:f32
+    pub max_speed:f32,
+    pub jump_power:f32
 }

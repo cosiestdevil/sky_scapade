@@ -1,10 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use base64::prelude::*;
 use bevy::{
+    log,
     prelude::*,
     render::{
         render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat},
+        render_resource::{Extent3d, ShaderType, TextureDimension, TextureFormat},
     },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
@@ -93,7 +94,7 @@ fn main() {
     );
     app.add_systems(
         FixedUpdate,
-        (generate_more_if_needed, level_upgrade)
+        (generate_more_if_needed, level_upgrade,level_finish)
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
     app.add_systems(OnEnter(InGameState::Paused), pause_level);
@@ -120,24 +121,47 @@ fn move_camera_based_on_speed(
 ) {
     let mut camera = camera.single_mut();
     let player_velocity = velocities.single();
-    camera.translation.z = 200. + (player_velocity.linvel.x);
+    camera.translation.z = 200. + (player_velocity.linvel.x / 2.);
 }
-
+fn level_finish(mut level: Query<&mut Level>, time: Res<Time>,player: Query<&Transform,With<Player>>,    mut next_state: ResMut<NextState<InGameState>>,) {
+    let mut level = level.single_mut();
+    let player = player.single();
+    level.timer.tick(time.delta());
+    if level.timer.just_finished(){
+        log::info!("Level Finished. Travelled: {}",player.translation.x);
+        next_state.set(InGameState::End);
+    }
+}
 fn level_upgrade(
     mut commands: Commands,
     time: Res<Time>,
     mut level: Query<&mut Level>,
     mut player: Query<&mut Player>,
+    mut generator: ResMut<generate::Generator>,
 ) {
     let mut level = level.single_mut();
     level.upgrade_timer.tick(time.delta());
+    let upgrades = vec![UpgradeType::Speed, UpgradeType::JumpPower];
     if level.upgrade_timer.just_finished() {
-        println!("Upgarded Speed");
-        let mut player = player.single_mut();
-        player.max_speed *= 2.;
+        let upgrade = &upgrades[generator.get_upgrade() % upgrades.len()];
+        log::info!("Upgrade:{:?}", upgrade);
+        match upgrade {
+            UpgradeType::Speed => {
+                let mut player = player.single_mut();
+                player.max_speed *= 1.1;
+            }
+            UpgradeType::JumpPower => {
+                let mut player = player.single_mut();
+                player.jump_power *= 1.1;
+            }
+        }
     }
 }
-
+#[derive(Debug)]
+enum UpgradeType {
+    Speed,
+    JumpPower,
+}
 fn generate_more_if_needed(
     mut commands: Commands,
     mut level: Query<(Entity, &mut crate::Level)>,
@@ -196,7 +220,7 @@ fn move_player(
     });
     if action_state.pressed(&input::Action::Jump) {
         controller.action(TnuaBuiltinJump {
-            height: 50.,
+            height: player.jump_power,
             ..default()
         });
     }
@@ -206,6 +230,7 @@ fn move_player(
 struct Level {
     right: f32,
     upgrade_timer: Timer,
+    timer:Timer
 }
 
 #[derive(Component)]
@@ -264,6 +289,7 @@ fn start_level(
             Level {
                 right: 255.,
                 upgrade_timer: Timer::new(Duration::from_secs(5), TimerMode::Repeating),
+                timer:Timer::new(Duration::from_secs(30), TimerMode::Once)
             },
             TransformBundle::default(),
             VisibilityBundle::default(),
@@ -292,7 +318,10 @@ fn start_level(
         .insert(TnuaRapier3dSensorShape(Collider::capsule_y(10., 5.)))
         .insert(TnuaControllerBundle::default())
         .insert(TnuaRapier3dIOBundle::default())
-        .insert(input::Player { max_speed: 100. })
+        .insert(input::Player {
+            max_speed: 100.,
+            jump_power: 50.,
+        })
         .insert(InputManagerBundle::with_map(input_map))
         .insert(RigidBody::Dynamic)
         .insert(LockedAxes::ROTATION_LOCKED)

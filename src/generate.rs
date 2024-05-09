@@ -5,8 +5,9 @@ use rand_chacha::ChaCha20Rng;
 
 #[derive(Resource, Clone)]
 pub struct Generator {
-    seed:[u8;32],
+    seed: [u8; 32],
     height_generator: cosiest_noisiest::NoiseGenerator<f64>,
+    upgrade_rng: ChaCha20Rng,
 }
 
 impl Generator {
@@ -36,7 +37,7 @@ impl Generator {
         let rng = ChaCha20Rng::from_seed(seed);
         Self::new(rng, height_wave_length, height_amplitude, height_octaves)
     }
-    pub fn get_seed(&self)->[u8;32]{
+    pub fn get_seed(&self) -> [u8; 32] {
         self.seed
     }
     pub fn new(
@@ -45,20 +46,26 @@ impl Generator {
         height_amplitude: f64,
         height_octaves: usize,
     ) -> Self {
-
         let mut height_rng = rng.clone();
         height_rng.set_stream(1);
+        let mut upgrade_rng = rng.clone();
+        upgrade_rng.set_stream(2);
         Self {
-            seed:rng.get_seed(),
+            seed: rng.get_seed(),
             height_generator: NoiseGenerator::from_rng(
                 height_rng,
                 1. / height_wave_length,
                 height_amplitude,
                 height_octaves,
             ),
+            upgrade_rng
         }
     }
     pub fn get_height(&mut self, x: usize) -> f64 {
         self.height_generator.sample(x)
+    }
+
+    pub fn get_upgrade(&mut self) ->usize{
+        self.upgrade_rng.gen()
     }
 }
