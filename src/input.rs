@@ -8,4 +8,6 @@ pub enum Action {
     Jump,
 }
 #[derive(Component)]
-pub struct Player;
+pub struct Player{
+    pub max_speed:f32
+}

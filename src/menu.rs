@@ -448,3 +448,4 @@ enum SettingsMenuButton {
 
 #[derive(Component)]
 struct SettingsMenuButtonComponent(SettingsMenuButton);
+

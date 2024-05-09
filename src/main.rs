@@ -49,6 +49,14 @@ fn main() {
             })
             .set(ImagePlugin::default_nearest()),
     )
+    .insert_resource(RapierConfiguration {
+        // gravity: Vec2::ZERO,
+        timestep_mode: TimestepMode::Fixed {
+            dt: 1.0 / 64.0,
+            substeps: 1,
+        },
+        ..RapierConfiguration::new(1.0)
+    })
     .add_plugins(RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule())
     .add_plugins(RapierDebugRenderPlugin::default())
     .insert_resource(WinitSettings {
@@ -70,6 +78,7 @@ fn main() {
     .add_plugins(PerfUiPlugin)
     .add_systems(Startup, setup)
     .add_systems(Update, temp);
+    app.insert_state(InGameState::Playing);
     app.add_plugins(InputManagerPlugin::<input::Action>::default());
     app.add_plugins((
         TnuaControllerPlugin::default(),
@@ -77,18 +86,56 @@ fn main() {
     ));
     app.add_systems(OnExit(AppState::InGame), cleanup_level);
     app.add_systems(OnEnter(AppState::InGame), start_level);
-    app.add_systems(Update, (move_player).run_if(in_state(AppState::InGame)));
+    app.add_systems(
+        Update,
+        (move_player, move_camera_based_on_speed)
+            .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
+    );
     app.add_systems(
         FixedUpdate,
-        (generate_more_if_needed).run_if(in_state(AppState::InGame)),
+        (generate_more_if_needed, level_upgrade)
+            .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
+    app.add_systems(OnEnter(InGameState::Paused), pause_level);
+    app.add_systems(OnExit(InGameState::Paused), resume_level);
     app.run();
 }
 
-#[derive(Resource,Clone)]
+#[derive(Resource, Clone)]
 struct PlatformAssets {
     mesh: Handle<Mesh>,
     material: Handle<StandardMaterial>,
+}
+
+fn pause_level(mut physics: ResMut<RapierConfiguration>) {
+    physics.physics_pipeline_active = false;
+}
+fn resume_level(mut physics: ResMut<RapierConfiguration>) {
+    physics.physics_pipeline_active = true;
+}
+
+fn move_camera_based_on_speed(
+    mut camera: Query<&mut Transform, With<Camera>>,
+    velocities: Query<&Velocity, With<Player>>,
+) {
+    let mut camera = camera.single_mut();
+    let player_velocity = velocities.single();
+    camera.translation.z = 200. + (player_velocity.linvel.x);
+}
+
+fn level_upgrade(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut level: Query<&mut Level>,
+    mut player: Query<&mut Player>,
+) {
+    let mut level = level.single_mut();
+    level.upgrade_timer.tick(time.delta());
+    if level.upgrade_timer.just_finished() {
+        println!("Upgarded Speed");
+        let mut player = player.single_mut();
+        player.max_speed *= 2.;
+    }
 }
 
 fn generate_more_if_needed(
@@ -125,9 +172,13 @@ fn generate_more_if_needed(
 }
 
 fn move_player(
-    mut query: Query<(&ActionState<input::Action>, &mut TnuaController), With<input::Player>>,
+    mut query: Query<(
+        &ActionState<input::Action>,
+        &mut TnuaController,
+        &input::Player,
+    )>,
 ) {
-    let (action_state, mut controller) = query.single_mut();
+    let (action_state, mut controller, player) = query.single_mut();
     // Each action has a button-like state of its own that you can check
     //println!("move_player {:?}",action_state);
     let mut direction = Vec3::ZERO;
@@ -138,7 +189,7 @@ fn move_player(
         direction += Vec3::X;
     }
     controller.basis(TnuaBuiltinWalk {
-        desired_velocity: direction.normalize_or_zero() * 100.0,
+        desired_velocity: direction.normalize_or_zero() * player.max_speed,
         desired_forward: direction.normalize_or_zero(),
         float_height: 15.,
         ..Default::default()
@@ -154,6 +205,7 @@ fn move_player(
 #[derive(Component)]
 struct Level {
     right: f32,
+    upgrade_timer: Timer,
 }
 
 #[derive(Component)]
@@ -176,7 +228,9 @@ fn start_level(
     asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut next_state: ResMut<NextState<InGameState>>,
 ) {
+    next_state.set(InGameState::Playing);
     let mut generator = generate::Generator::from_entropy(256., 64., 5);
     let platform_mesh: Handle<Mesh> = asset_server.load("platform.obj");
     let debug_material = materials.add(StandardMaterial {
@@ -207,7 +261,10 @@ fn start_level(
     commands.insert_resource(generator.clone());
     let level = commands
         .spawn((
-            Level { right: 255. },
+            Level {
+                right: 255.,
+                upgrade_timer: Timer::new(Duration::from_secs(5), TimerMode::Repeating),
+            },
             TransformBundle::default(),
             VisibilityBundle::default(),
         ))
@@ -235,7 +292,7 @@ fn start_level(
         .insert(TnuaRapier3dSensorShape(Collider::capsule_y(10., 5.)))
         .insert(TnuaControllerBundle::default())
         .insert(TnuaRapier3dIOBundle::default())
-        .insert(input::Player)
+        .insert(input::Player { max_speed: 100. })
         .insert(InputManagerBundle::with_map(input_map))
         .insert(RigidBody::Dynamic)
         .insert(LockedAxes::ROTATION_LOCKED)
@@ -408,13 +465,17 @@ enum AppState {
 
 fn temp(
     input: Res<ButtonInput<KeyCode>>,
-    state: Res<State<AppState>>,
-    mut next_state: ResMut<NextState<AppState>>,
+    state: Res<State<InGameState>>,
+    mut next_state: ResMut<NextState<InGameState>>,
+    mut next_app: ResMut<NextState<AppState>>,
 ) {
     if input.just_pressed(KeyCode::Escape) {
         match state.get() {
-            AppState::InGame => next_state.set(AppState::MainMenu),
-            AppState::MainMenu => (),
+            InGameState::Playing => next_state.set(InGameState::Paused),
+            InGameState::Paused => next_state.set(InGameState::Playing),
+            InGameState::Upgrade => {}
+            InGameState::End => next_app.set(AppState::MainMenu),
+            InGameState::None => {}
         }
     }
 }
@@ -479,4 +540,13 @@ mod system_info {
             current_used_mem
         });
     }
+}
+
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum InGameState {
+    Playing,
+    Paused,
+    Upgrade,
+    End,
+    None,
 }
