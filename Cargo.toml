@@ -23,7 +23,7 @@ bevy_rapier3d = { version = "*", features = [ "simd-stable", "debug-render-3d" ]
 leafwing-input-manager = "0.13.3"
 bevy-tnua-rapier3d = "0.6.0"
 bevy-tnua = "0.17.0"
-
+bevy_embedded_assets = "0.10.2"
 cosiest_noisiest ={path = "../cosiest_noisiest"}
 base64 = "0.22.1"
 

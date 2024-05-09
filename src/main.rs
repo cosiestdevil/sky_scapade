@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use base64::prelude::*;
 use bevy::{
     prelude::*,
@@ -12,6 +13,7 @@ use bevy_tnua::{
     builtins::{TnuaBuiltinJump, TnuaBuiltinWalk},
     controller::{TnuaController, TnuaControllerBundle, TnuaControllerPlugin},
 };
+use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
 use input::Player;
 use iyes_perf_ui::PerfUiPlugin;
@@ -22,9 +24,12 @@ use std::time::Duration;
 mod generate;
 mod input;
 mod menu;
-const GAME_NAME: &str = "Cosiest";
+const GAME_NAME: &str = "SkyScapade";
 fn main() {
     let mut app = App::new();
+    app.add_plugins(EmbeddedAssetPlugin{
+        mode:bevy_embedded_assets::PluginMode::ReplaceDefault
+    });
     app.add_plugins(
         DefaultPlugins
             .set(WindowPlugin {
@@ -40,7 +45,8 @@ fn main() {
             })
             .set(ImagePlugin::default_nearest()),
     )
-    .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+    
+    .add_plugins(RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule())
     .add_plugins(RapierDebugRenderPlugin::default())
     .insert_resource(WinitSettings {
         focused_mode: UpdateMode::Continuous,
