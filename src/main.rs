@@ -13,6 +13,7 @@ use bevy_tnua::{
     controller::{TnuaController, TnuaControllerBundle, TnuaControllerPlugin},
 };
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
+use input::Player;
 use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
     action_state::ActionState, input_map::InputMap, plugin::InputManagerPlugin, InputManagerBundle,
@@ -65,10 +66,38 @@ fn main() {
         TnuaControllerPlugin::default(),
         TnuaRapier3dPlugin::default(),
     ));
-    app.add_systems(OnExit(AppState::InGame), (cleanup_level));
-    app.add_systems(OnEnter(AppState::InGame), (start_level));
+    app.add_systems(OnExit(AppState::InGame), cleanup_level);
+    app.add_systems(OnEnter(AppState::InGame), start_level);
     app.add_systems(Update, (move_player).run_if(in_state(AppState::InGame)));
+    app.add_systems(FixedUpdate, (generate_more_if_needed).run_if(in_state(AppState::InGame)));
     app.run();
+}
+
+fn generate_more_if_needed(
+    mut commands: Commands,
+    mut level: Query<(Entity, &mut crate::Level)>,
+    player: Query<&Transform, With<Player>>,
+    mut generator: ResMut<generate::Generator>,
+) {
+    let (level_entity, mut level) = level.single_mut();
+    let player_transform = player.single();
+    if (player_transform.translation.x/20.) >= level.right - 10. {
+        for x in 1..256 {
+            let x = x+(level.right as usize);
+            let hy = (generator.get_height(x) * 10.) as f32;
+            commands
+                .spawn(Collider::cuboid(10.0, 10., 10.))
+                .insert(LevelFloor)
+                .insert(TransformBundle::from_transform(Transform::from_xyz(
+                    (x as f32) * 20.,
+                    hy,
+                    0.,
+                )))
+                .set_parent(level_entity);
+            
+        }
+        level.right+=255.;
+    }
 }
 
 fn move_player(
@@ -99,8 +128,12 @@ fn move_player(
 }
 
 #[derive(Component)]
-struct Level;
+struct Level {
+    right: f32,
+}
 
+#[derive(Component)]
+struct LevelFloor;
 fn cleanup_level(mut commands: Commands, level: Query<Entity, With<Level>>) {
     let level = level.iter();
     for level in level {
@@ -136,7 +169,7 @@ fn start_level(
     commands.insert_resource(generator.clone());
     let level = commands
         .spawn((
-            Level,
+            Level { right: 255. },
             TransformBundle::default(),
             VisibilityBundle::default(),
         ))
@@ -144,6 +177,7 @@ fn start_level(
     let hy = (generator.get_height(0) * 10.) as f32;
     commands
         .spawn(Collider::cuboid(10.0, 10., 10.))
+        .insert(LevelFloor)
         .insert(TransformBundle::from_transform(Transform::from_xyz(
             0., hy, 0.,
         )))
@@ -179,6 +213,7 @@ fn start_level(
         let hy = (generator.get_height(x) * 10.) as f32;
         commands
             .spawn(Collider::cuboid(10.0, 10., 10.))
+            .insert(LevelFloor)
             .insert(TransformBundle::from_transform(Transform::from_xyz(
                 (x as f32) * 20.,
                 hy,
@@ -217,7 +252,7 @@ impl UiHelper for ChildBuilder<'_> {
                 },
             ));
         });
-        return result;
+        result
     }
 }
 
