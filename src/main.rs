@@ -1,14 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use base64::prelude::*;
 use bevy::{
-    log,
-    prelude::*,
-    render::{
+    log, prelude::*, render::{
         render_asset::RenderAssetUsages,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
-    },
-    window::PresentMode,
-    winit::{UpdateMode, WinitSettings},
+    }, window::PresentMode, winit::{UpdateMode, WinitSettings}
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
@@ -60,7 +56,7 @@ fn main() {
         ..RapierConfiguration::new(1.0)
     })
     .add_plugins(RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule())
-    .add_plugins(RapierDebugRenderPlugin::default())
+    //.add_plugins(RapierDebugRenderPlugin::default())
     .insert_resource(WinitSettings {
         focused_mode: UpdateMode::Continuous,
         unfocused_mode: UpdateMode::ReactiveLowPower {
@@ -129,7 +125,7 @@ fn move_camera_based_on_speed(
     let mut camera = camera.single_mut();
     let player_velocity = velocities.single();
 
-    camera.translation.z = (cube_size * 20.) + player_velocity.linvel.x.abs().sqrt();
+    camera.translation.z = (cube_size * 20.) + (player_velocity.linvel.x.abs().sqrt() - 5.).max(0.);
 }
 fn level_finish(
     mut level: Query<&mut Level>,
@@ -287,6 +283,7 @@ fn start_level(
     asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes:ResMut<Assets<Mesh>>,
     mut next_state: ResMut<NextState<InGameState>>,
 ) {
     next_state.set(InGameState::Playing);
@@ -351,8 +348,14 @@ fn start_level(
         (input::Action::Left, KeyCode::KeyA),
         (input::Action::Right, KeyCode::KeyD),
     ]);
+    let player_mesh = meshes.add(Capsule3d::new(0.4, 2.));
     let player = commands
         .spawn(Collider::capsule_y(1., 0.4))
+        .insert(PbrBundle{
+            mesh:player_mesh,
+            material: debug_material.clone(),
+            ..default()
+        })
         .insert(TnuaRapier3dSensorShape(Collider::ball(0.4)))
         .insert(TnuaControllerBundle::default())
         .insert(TnuaRapier3dIOBundle::default())
@@ -374,7 +377,7 @@ fn start_level(
         // =
         commands.entity(camera).set_parent(player);
         *camera_transform = Transform::from_xyz(0.0, cube_size * 5., cube_size * 20.)
-            .looking_at(Vec3::new(0., cube_size * 2.5, 0.), Vec3::Y)
+            .looking_at(Vec3::new(0., 0., 0.), Vec3::Y)
     }
     for x in 1..6 {
         let hy = (generator.get_height(x) as f32) * cube_size;
