@@ -5,7 +5,7 @@ use bevy::{
     prelude::*,
     render::{
         render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, ShaderType, TextureDimension, TextureFormat},
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
     },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
@@ -20,6 +20,7 @@ use bevy_tnua::{
     controller::{TnuaController, TnuaControllerBundle, TnuaControllerPlugin},
 };
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
+use generate::NoiseSettings;
 use input::Player;
 use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
@@ -94,7 +95,12 @@ fn main() {
     );
     app.add_systems(
         FixedUpdate,
-        (generate_more_if_needed, level_upgrade,level_finish)
+        (
+            generate_more_if_needed,
+            level_upgrade,
+            level_finish,
+            killing_floor,
+        )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
     app.add_systems(OnEnter(InGameState::Paused), pause_level);
@@ -119,16 +125,23 @@ fn move_camera_based_on_speed(
     mut camera: Query<&mut Transform, With<Camera>>,
     velocities: Query<&Velocity, With<Player>>,
 ) {
+    let cube_size = 1.0f32;
     let mut camera = camera.single_mut();
     let player_velocity = velocities.single();
-    camera.translation.z = 200. + (player_velocity.linvel.x / 2.);
+
+    camera.translation.z = (cube_size * 20.) + player_velocity.linvel.x.abs().sqrt();
 }
-fn level_finish(mut level: Query<&mut Level>, time: Res<Time>,player: Query<&Transform,With<Player>>,    mut next_state: ResMut<NextState<InGameState>>,) {
+fn level_finish(
+    mut level: Query<&mut Level>,
+    time: Res<Time>,
+    player: Query<&Transform, With<Player>>,
+    mut next_state: ResMut<NextState<InGameState>>,
+) {
     let mut level = level.single_mut();
     let player = player.single();
     level.timer.tick(time.delta());
-    if level.timer.just_finished(){
-        log::info!("Level Finished. Travelled: {}",player.translation.x);
+    if level.timer.just_finished() {
+        log::info!("Level Finished. Travelled: {}", player.translation.x);
         next_state.set(InGameState::End);
     }
 }
@@ -170,14 +183,24 @@ fn generate_more_if_needed(
     mut generator: ResMut<generate::Generator>,
 ) {
     let (level_entity, mut level) = level.single_mut();
+    let cube_size = 1.0f32;
     let player_transform = player.single();
-    if (player_transform.translation.x / 20.) >= level.right - 10. {
-        for x in 1..256 {
+    if (player_transform.translation.x / (cube_size * 2.)) >= level.right - 10. {
+        let mut hole_streak = 0;
+        for x in 0..256 {
             let x = x + (level.right as usize);
-            let hy = (generator.get_height(x) * 10.) as f32;
+            let hy = (generator.get_height(x) as f32) * cube_size;
             let platform_assets = platform_assets.clone();
+            if hole_streak > 4 {
+                hole_streak = 0;
+            } else {
+                if generator.is_hole(x) {
+                    hole_streak += 1;
+                    continue;
+                }
+            }
             commands
-                .spawn(Collider::cuboid(10.0, 10., 10.))
+                .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
                 .insert(PbrBundle {
                     mesh: platform_assets.mesh.clone(),
                     material: platform_assets.material.clone(),
@@ -185,7 +208,7 @@ fn generate_more_if_needed(
                 })
                 .insert(LevelFloor)
                 .insert(TransformBundle::from_transform(Transform::from_xyz(
-                    (x as f32) * 20.,
+                    (x as f32) * cube_size * 2.,
                     hy,
                     0.,
                 )))
@@ -215,7 +238,7 @@ fn move_player(
     controller.basis(TnuaBuiltinWalk {
         desired_velocity: direction.normalize_or_zero() * player.max_speed,
         desired_forward: direction.normalize_or_zero(),
-        float_height: 15.,
+        float_height: 2.,
         ..Default::default()
     });
     if action_state.pressed(&input::Action::Jump) {
@@ -230,7 +253,7 @@ fn move_player(
 struct Level {
     right: f32,
     upgrade_timer: Timer,
-    timer:Timer
+    timer: Timer,
 }
 
 #[derive(Component)]
@@ -246,6 +269,17 @@ fn cleanup_level(mut commands: Commands, level: Query<Entity, With<Level>>) {
     });
 }
 
+fn killing_floor(
+    mut commands: Commands,
+    player: Query<(Entity, &Transform), With<Player>>,
+    mut next_state: ResMut<NextState<InGameState>>,
+) {
+    let (entity, player) = player.single();
+    if player.translation.y < -10. {
+        next_state.set(InGameState::End);
+    }
+}
+
 fn start_level(
     mut commands: Commands,
     mut camera: Query<(Entity, &mut Transform), With<Camera>>,
@@ -256,7 +290,10 @@ fn start_level(
     mut next_state: ResMut<NextState<InGameState>>,
 ) {
     next_state.set(InGameState::Playing);
-    let mut generator = generate::Generator::from_entropy(256., 64., 5);
+    let mut generator = generate::Generator::from_entropy(
+        NoiseSettings::new(256, 64, 5),
+        NoiseSettings::new(7, 64, 7),
+    );
     let platform_mesh: Handle<Mesh> = asset_server.load("platform.obj");
     let debug_material = materials.add(StandardMaterial {
         base_color_texture: Some(images.add(uv_debug_texture())),
@@ -288,16 +325,17 @@ fn start_level(
         .spawn((
             Level {
                 right: 255.,
-                upgrade_timer: Timer::new(Duration::from_secs(5), TimerMode::Repeating),
-                timer:Timer::new(Duration::from_secs(30), TimerMode::Once)
+                upgrade_timer: Timer::new(Duration::from_secs(10), TimerMode::Repeating),
+                timer: Timer::new(Duration::from_secs(300), TimerMode::Once),
             },
             TransformBundle::default(),
             VisibilityBundle::default(),
         ))
         .id();
-    let hy = (generator.get_height(0) * 10.) as f32;
+    let cube_size = 1.0f32;
+    let hy = (generator.get_height(0) as f32) * cube_size;
     commands
-        .spawn(Collider::cuboid(10.0, 10., 10.))
+        .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
         .insert(PbrBundle {
             mesh: platform_mesh.clone(),
             material: debug_material.clone(),
@@ -314,20 +352,20 @@ fn start_level(
         (input::Action::Right, KeyCode::KeyD),
     ]);
     let player = commands
-        .spawn(Collider::capsule_y(10., 5.))
-        .insert(TnuaRapier3dSensorShape(Collider::capsule_y(10., 5.)))
+        .spawn(Collider::capsule_y(1., 0.4))
+        .insert(TnuaRapier3dSensorShape(Collider::ball(0.4)))
         .insert(TnuaControllerBundle::default())
         .insert(TnuaRapier3dIOBundle::default())
         .insert(input::Player {
-            max_speed: 100.,
-            jump_power: 50.,
+            max_speed: 10.,
+            jump_power: 5.,
         })
         .insert(InputManagerBundle::with_map(input_map))
         .insert(RigidBody::Dynamic)
         .insert(LockedAxes::ROTATION_LOCKED)
         .insert(TransformBundle::from(Transform::from_xyz(
-            15.,
-            hy + 35.,
+            1.5 * cube_size,
+            hy + (3.5 * cube_size),
             0.,
         )))
         .set_parent(level)
@@ -335,13 +373,13 @@ fn start_level(
     if let Ok((camera, mut camera_transform)) = camera.get_single_mut() {
         // =
         commands.entity(camera).set_parent(player);
-        *camera_transform =
-            Transform::from_xyz(0.0, 50., 200.0).looking_at(Vec3::new(0., 25.0, 0.), Vec3::Y)
+        *camera_transform = Transform::from_xyz(0.0, cube_size * 5., cube_size * 20.)
+            .looking_at(Vec3::new(0., cube_size * 2.5, 0.), Vec3::Y)
     }
-    for x in 1..256 {
-        let hy = (generator.get_height(x) * 10.) as f32;
+    for x in 1..6 {
+        let hy = (generator.get_height(x) as f32) * cube_size;
         commands
-            .spawn(Collider::cuboid(10.0, 10., 10.))
+            .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
             .insert(PbrBundle {
                 mesh: platform_mesh.clone(),
                 material: debug_material.clone(),
@@ -349,7 +387,33 @@ fn start_level(
             })
             .insert(LevelFloor)
             .insert(TransformBundle::from_transform(Transform::from_xyz(
-                (x as f32) * 20.,
+                (x as f32) * cube_size * 2.,
+                hy,
+                0.,
+            )))
+            .set_parent(level);
+    }
+    let mut hole_streak = 0;
+    for x in 6..256 {
+        let hy = (generator.get_height(x) as f32) * cube_size;
+        if hole_streak > 4 {
+            hole_streak = 0;
+        } else {
+            if generator.is_hole(x) {
+                hole_streak += 1;
+                continue;
+            }
+        }
+        commands
+            .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
+            .insert(PbrBundle {
+                mesh: platform_mesh.clone(),
+                material: debug_material.clone(),
+                ..default()
+            })
+            .insert(LevelFloor)
+            .insert(TransformBundle::from_transform(Transform::from_xyz(
+                (x as f32) * cube_size * 2.,
                 hy,
                 0.,
             )))
