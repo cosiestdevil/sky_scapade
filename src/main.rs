@@ -1,10 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use base64::prelude::*;
 use bevy::{
-    log, prelude::*, render::{
+    log,
+    prelude::*,
+    render::{
         render_asset::RenderAssetUsages,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
-    }, window::PresentMode, winit::{UpdateMode, WinitSettings}
+    },
+    window::PresentMode,
+    winit::{UpdateMode, WinitSettings},
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
@@ -96,6 +100,7 @@ fn main() {
             level_upgrade,
             level_finish,
             killing_floor,
+            update_score,
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
@@ -171,6 +176,26 @@ enum UpgradeType {
     Speed,
     JumpPower,
 }
+#[derive(Component)]
+struct Score;
+fn update_score(
+    mut commands: Commands,
+    mut player: Query<(&Transform, &mut Player)>,
+    safe_ui: Query<Entity, With<crate::SafeUi>>,
+    mut score: Query<&mut Text, With<Score>>,
+) {
+    let (player_transform, mut player) = player.single_mut();
+    if player_transform.translation.x > player.score {
+        player.score = player_transform.translation.x;
+    }
+    match score.get_single_mut() {
+        Ok(mut score_text) => {
+            score_text.sections[0].value = format!("Score: {}", player.score);
+        }
+        Err(_) => {}
+    }
+}
+
 fn generate_more_if_needed(
     mut commands: Commands,
     mut level: Query<(Entity, &mut crate::Level)>,
@@ -283,7 +308,7 @@ fn start_level(
     asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes:ResMut<Assets<Mesh>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mut next_state: ResMut<NextState<InGameState>>,
 ) {
     next_state.set(InGameState::Playing);
@@ -307,14 +332,34 @@ fn start_level(
         let mut safe_ui = commands.entity(safe_ui);
         safe_ui.with_children(|ui| {
             let seed = BASE64_STANDARD.encode(generator.get_seed());
-            ui.spawn(TextBundle::from_section(
-                seed,
-                TextStyle {
-                    color: Color::WHITE,
-                    font_size: 24.0,
+            ui.spawn(NodeBundle {
+                style: Style {
+                    display: Display::Flex,
+                    flex_direction:FlexDirection::Column,
                     ..default()
                 },
-            ));
+                ..default()
+            })
+            .with_children(|ui| {
+                ui.spawn(TextBundle::from_section(
+                    format!("Seed: {}", seed),
+                    TextStyle {
+                        color: Color::WHITE,
+                        font_size: 24.0,
+                        ..default()
+                    },
+                ));
+
+                ui.spawn(TextBundle::from_section(
+                    format!("Score:{}", 0.0),
+                    TextStyle {
+                        color: Color::WHITE,
+                        font_size: 24.0,
+                        ..default()
+                    },
+                ))
+                .insert(Score);
+            });
         });
     }
     commands.insert_resource(generator.clone());
@@ -351,8 +396,8 @@ fn start_level(
     let player_mesh = meshes.add(Capsule3d::new(0.4, 2.));
     let player = commands
         .spawn(Collider::capsule_y(1., 0.4))
-        .insert(PbrBundle{
-            mesh:player_mesh,
+        .insert(PbrBundle {
+            mesh: player_mesh,
             material: debug_material.clone(),
             ..default()
         })
@@ -362,6 +407,7 @@ fn start_level(
         .insert(input::Player {
             max_speed: 10.,
             jump_power: 5.,
+            score: 0.0,
         })
         .insert(InputManagerBundle::with_map(input_map))
         .insert(RigidBody::Dynamic)
@@ -372,6 +418,18 @@ fn start_level(
             0.,
         )))
         .set_parent(level)
+        .with_children(|player|{
+            player.spawn(PointLightBundle {
+                point_light: PointLight {
+                    shadows_enabled: true,
+                    intensity: 100_000_000.,
+                    range: 1000.0,
+                    ..default()
+                },
+                transform: Transform::from_xyz(10.0, 60.0, 10.0),
+                ..default()
+            });
+        })
         .id();
     if let Ok((camera, mut camera_transform)) = camera.get_single_mut() {
         // =
