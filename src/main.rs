@@ -137,10 +137,19 @@ fn level_finish(
     time: Res<Time>,
     player: Query<&Transform, With<Player>>,
     mut next_state: ResMut<NextState<InGameState>>,
+    mut time_text: Query<&mut Text, With<TimeDisplay>>,
 ) {
     let mut level = level.single_mut();
     let player = player.single();
     level.timer.tick(time.delta());
+    
+    match time_text.get_single_mut() {
+        Ok(mut time_text) => {
+            let time = level.timer.elapsed().as_secs();
+            time_text.sections[0].value = format!("Time: {:02}:{:02}", time/60,time%60);
+        }
+        Err(_) => {}
+    }
     if level.timer.just_finished() {
         log::info!("Level Finished. Travelled: {}", player.translation.x);
         next_state.set(InGameState::End);
@@ -178,10 +187,11 @@ enum UpgradeType {
 }
 #[derive(Component)]
 struct Score;
+#[derive(Component)]
+struct TimeDisplay;
 fn update_score(
     mut commands: Commands,
     mut player: Query<(&Transform, &mut Player)>,
-    safe_ui: Query<Entity, With<crate::SafeUi>>,
     mut score: Query<&mut Text, With<Score>>,
 ) {
     let (player_transform, mut player) = player.single_mut();
@@ -335,7 +345,7 @@ fn start_level(
             ui.spawn(NodeBundle {
                 style: Style {
                     display: Display::Flex,
-                    flex_direction:FlexDirection::Column,
+                    flex_direction: FlexDirection::Column,
                     ..default()
                 },
                 ..default()
@@ -351,7 +361,7 @@ fn start_level(
                 ));
 
                 ui.spawn(TextBundle::from_section(
-                    format!("Score:{}", 0.0),
+                    format!("Score: {}", 0.0),
                     TextStyle {
                         color: Color::WHITE,
                         font_size: 24.0,
@@ -359,6 +369,15 @@ fn start_level(
                     },
                 ))
                 .insert(Score);
+                ui.spawn(TextBundle::from_section(
+                    format!("Time: {:?}", Duration::from_secs(0)),
+                    TextStyle {
+                        color: Color::WHITE,
+                        font_size: 24.0,
+                        ..default()
+                    },
+                ))
+                .insert(TimeDisplay);
             });
         });
     }
@@ -418,7 +437,7 @@ fn start_level(
             0.,
         )))
         .set_parent(level)
-        .with_children(|player|{
+        .with_children(|player| {
             player.spawn(PointLightBundle {
                 point_light: PointLight {
                     shadows_enabled: true,
