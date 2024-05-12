@@ -16,6 +16,7 @@ use bevy::{
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
 };
+use bevy_dolly::prelude::*;
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 #[cfg(feature = "bevy_mod_taa")]
@@ -39,6 +40,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 mod discord;
+mod camera;
 mod generate;
 mod input;
 mod menu;
@@ -92,7 +94,8 @@ fn main() {
     .add_plugins(bevy_framepace::FramepacePlugin)
     //.add_plugins(PerfUiPlugin)
     .add_systems(Startup, setup)
-    .add_systems(Update, (temp, skybox_loaded));
+    .add_systems(Update, (temp, skybox_loaded))
+    .add_systems(Update, Dolly::<MainCamera>::update_active);
     app.insert_state(InGameState::Playing);
     app.add_plugins(InputManagerPlugin::<input::Action>::default());
     app.add_plugins((
@@ -105,7 +108,7 @@ fn main() {
         Update,
         (
             move_player,
-            move_camera_based_on_speed,
+            update_camera,
             upgrade_notification_timers,
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
@@ -152,7 +155,13 @@ fn pause_level(mut physics: ResMut<RapierConfiguration>) {
 fn resume_level(mut physics: ResMut<RapierConfiguration>) {
     physics.physics_pipeline_active = true;
 }
-
+fn update_camera(q0: Query<(&Transform, &Velocity), With<Player>>, mut q1: Query<&mut Rig>) {
+    let (player, player_velocity) = q0.single().to_owned();
+    let mut rig = q1.single_mut();
+    let offset = 20. + (player_velocity.linvel.x.abs());
+    rig.driver_mut::<camera::MovableLookAt>()
+        .set_position_target(player.translation, Vec3::new(0.0, 6., offset));
+}
 fn move_camera_based_on_speed(
     mut query_camera: Query<(&mut Projection, &mut Transform), With<Camera>>,
     velocities: Query<&Velocity, With<Player>>,
@@ -367,6 +376,8 @@ fn level_upgrade(
 struct Score;
 #[derive(Component)]
 struct TimeDisplay;
+#[derive(Component)]
+struct MainCamera;
 fn update_score(
     //mut commands: Commands,
     mut player: Query<(&Transform, &mut Player)>,
@@ -586,10 +597,10 @@ fn cleanup_level(mut commands: Commands, level: Query<Entity, With<Level>>) {
     for level in level {
         commands.entity(level).despawn_recursive();
     }
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::new(0., 0.0, 0.), Vec3::Y),
-        ..default()
-    });
+    // commands.spawn(Camera3dBundle {
+    //     transform: Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::new(0., 0.0, 0.), Vec3::Y),
+    //     ..default()
+    // });
 }
 
 fn killing_floor(
@@ -1081,12 +1092,6 @@ fn setup(
     let skybox_handle = asset_server.load("skybox/cube.png");
     commands.insert_resource(SkyboxHandle(skybox_handle));
     // spawn a camera to be able to see anything
-    let mut camera = commands.spawn((Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::new(0., 0.0, 0.), Vec3::Y),
-
-        ..default()
-    },));
-
     if let settings::AntiAliasOption::Taa = settings.anti_alias {
         camera.insert(TAABundle::default());
     };
@@ -1100,8 +1105,17 @@ fn setup(
             mode: bevy::audio::PlaybackMode::Loop,
             volume: Volume::new(0.2),
             ..default()
-        },
     });
+    commands.spawn((
+        MainCamera, // The rig component tag
+        Rig::builder()
+            .with(camera::MovableLookAt::from_position_target(
+                Vec3::ZERO,
+                Vec3::ZERO,
+            ))
+            .build(),
+        Camera3dBundle::default(),
+    ));
     commands
         .spawn(NodeBundle {
             style: Style {

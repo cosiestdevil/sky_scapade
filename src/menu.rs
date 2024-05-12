@@ -7,6 +7,7 @@ use bevy_simple_text_input::{
 };
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use bevy_dolly::prelude::*;
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
@@ -230,11 +231,16 @@ fn enter_main_menu(
     safe_ui: Query<Entity, With<crate::SafeUi>>,
     mut commands: Commands,
     mut discord_activity: ResMut<ActivityState>,
+    mut q1: Query<&mut Rig,With<crate::MainCamera>>,
 ) {
     discord_activity.state = Some("In Main Menu".into());
     discord_activity.details = None;
     discord_activity.start = None;
 
+    
+    let mut rig = q1.single_mut();
+    rig.driver_mut::<crate::camera::MovableLookAt>()
+        .set_position_target(Vec3::ZERO,Vec3::ZERO);
     let safe_ui = safe_ui.get_single();
     if let Ok(safe_ui) = safe_ui {
         let mut safe_ui = commands.entity(safe_ui);

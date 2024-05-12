@@ -520,6 +520,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_dolly"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7360942ebba92bdcb60e583fae786d26a969c535999eb090bdcda30b590f17b8"
+dependencies = [
+ "bevy",
+ "bevy_math",
+ "bevy_transform",
+ "leafwing-input-manager",
+]
+
+[[package]]
 name = "bevy_ecs"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3542,6 +3554,7 @@ dependencies = [
  "bevy-tnua",
  "bevy-tnua-rapier3d",
  "bevy_diagnostic",
+ "bevy_dolly",
  "bevy_ecs",
  "bevy_embedded_assets",
  "bevy_framepace",
