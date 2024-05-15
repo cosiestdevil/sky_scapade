@@ -26,6 +26,7 @@ bevy-tnua = "0.17.0"
 bevy_embedded_assets = "0.10.2"
 cosiest_noisiest ={path = "../cosiest_noisiest"}
 base64 = "0.22.1"
+strum ={version = "0.26.2",features = ["derive"]}
 
 [profile.release]
 opt-level = 3

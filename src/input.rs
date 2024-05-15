@@ -1,15 +1,50 @@
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
+use crate::{DashSkill, JumpSkill, StatUpgrade, UpgradeType};
+
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum Action {
     Left,
     Right,
     Jump,
+    Dash,
 }
 #[derive(Component)]
 pub struct Player{
-    pub max_speed:f32,
-    pub jump_power:f32,
-    pub score:f32
+    pub base_speed:f32,
+    pub speed_modifiers:Vec<StatUpgrade>,
+    pub base_jump_power:f32,
+    pub jump_modifiers:Vec<StatUpgrade>,
+    pub score:f32,
+    pub jump_skill:JumpSkill,
+    pub dash_skill:DashSkill,
+    pub used_dashes:u8,
+    pub dash_cooldown:Option<Timer>,
+    }
+impl Player{
+    pub fn max_speed(&mut self)->f32{
+        let mut result = self.base_speed;
+        self.speed_modifiers.sort_unstable_by(|a,b| a.additive.cmp(&b.additive));
+        for modifier in &self.speed_modifiers  {
+            if modifier.additive{
+                result += modifier.modifier;
+            }else{
+                result *= modifier.modifier;
+            }
+        }
+        result
+    }
+    pub fn jump_power(&mut self)->f32{
+        let mut result = self.base_jump_power;
+        self.jump_modifiers.sort_unstable_by(|a,b| a.additive.cmp(&b.additive));
+        for modifier in &self.jump_modifiers  {
+            if modifier.additive{
+                result += modifier.modifier;
+            }else{
+                result *= modifier.modifier;
+            }
+        }
+        result
+    }
 }
