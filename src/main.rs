@@ -16,7 +16,10 @@ use bevy_framepace::{FramepaceSettings, Limiter};
 use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
 use bevy_tnua::{
-    builtins::{TnuaBuiltinDash, TnuaBuiltinJump, TnuaBuiltinWalk}, control_helpers::TnuaSimpleAirActionsCounter, controller::{TnuaController, TnuaControllerBundle, TnuaControllerPlugin}, TnuaAction
+    builtins::{TnuaBuiltinDash, TnuaBuiltinJump, TnuaBuiltinWalk},
+    control_helpers::TnuaSimpleAirActionsCounter,
+    controller::{TnuaController, TnuaControllerBundle, TnuaControllerPlugin},
+    TnuaAction,
 };
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
 use generate::NoiseSettings;
@@ -103,6 +106,8 @@ fn main() {
             killing_floor,
             update_score,
             dash_cooldown,
+            jump_skill_display,
+            dash_skill_display,
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
@@ -349,7 +354,7 @@ fn move_player(
         &mut TnuaSimpleAirActionsCounter,
     )>,
 ) {
-    let (action_state, mut controller, mut player,mut air_actions_counter) = query.single_mut();
+    let (action_state, mut controller, mut player, mut air_actions_counter) = query.single_mut();
     // Each action has a button-like state of its own that you can check
     //println!("move_player {:?}",action_state);
     air_actions_counter.update(controller.as_mut());
@@ -368,28 +373,30 @@ fn move_player(
     });
     if action_state.just_pressed(&input::Action::Dash) {
         if player.dash_skill.max_dash > player.used_dashes {
-            if let None = player.dash_cooldown {
-                player.dash_cooldown =
-                    Some(Timer::new(player.dash_skill.cooldown, TimerMode::Once));
-            }
+            if !(!player.dash_skill.air && controller.is_airborne().unwrap()) {
+                if let None = player.dash_cooldown {
+                    player.dash_cooldown =
+                        Some(Timer::new(player.dash_skill.cooldown, TimerMode::Once));
+                }
 
-            player.used_dashes += 1;
-            info!("Used Dashes: {}", player.used_dashes);
-            controller.action(TnuaBuiltinDash {
-                displacement: direction.normalize_or_zero() * player.max_speed() * 0.75,
-                speed: player.max_speed() * 3.,
-                allow_in_air: player.dash_skill.air,
-                ..default()
-            });
+                player.used_dashes += 1;
+                info!("Used Dashes: {}", player.used_dashes);
+                controller.action(TnuaBuiltinDash {
+                    displacement: direction.normalize_or_zero() * player.max_speed() * 0.75,
+                    speed: player.max_speed() * 3.,
+                    allow_in_air: player.dash_skill.air,
+                    ..default()
+                });
+            } 
         }
     }
 
     if action_state.pressed(&input::Action::Jump) {
-        let air_jumps:usize = (player.jump_skill.max_jumps - 1).into();
+        let air_jumps: usize = (player.jump_skill.max_jumps - 1).into();
         controller.action(TnuaBuiltinJump {
             height: player.jump_power(),
-            allow_in_air: player.jump_skill.air && air_actions_counter.air_count_for(TnuaBuiltinJump::NAME)
-            <= air_jumps,
+            allow_in_air: player.jump_skill.air
+                && air_actions_counter.air_count_for(TnuaBuiltinJump::NAME) <= air_jumps,
             ..default()
         });
     }
@@ -426,6 +433,36 @@ fn killing_floor(
     }
 }
 
+#[derive(Component)]
+struct DashSkillDisplay;
+#[derive(Component)]
+struct JumpSkillDisplay;
+
+fn jump_skill_display(player: Query<&Player>, mut jumps: Query<&mut Text, With<JumpSkillDisplay>>) {
+    let player = player.single();
+    match jumps.get_single_mut() {
+        Ok(mut jumps_text) => {
+            jumps_text.sections[0].value = format!("Jump: {}", player.jump_skill.max_jumps);
+        }
+        Err(_) => {}
+    }
+}
+
+fn dash_skill_display(
+    player: Query<&Player>,
+    mut dashses: Query<&mut Text, With<DashSkillDisplay>>,
+) {
+    let player = player.single();
+    match dashses.get_single_mut() {
+        Ok(mut dashses_text) => {
+            let air = if player.dash_skill.air {" (Air)"}else{""};
+            dashses_text.sections[0].value =
+                format!("Dash: {}{}",player.dash_skill.max_dash - player.used_dashes,air);
+        }
+        Err(_) => {}
+    }
+}
+
 fn start_level(
     mut commands: Commands,
     mut camera: Query<(Entity, &mut Transform), With<Camera>>,
@@ -457,43 +494,96 @@ fn start_level(
     if let Ok(safe_ui) = safe_ui {
         let mut safe_ui = commands.entity(safe_ui);
         safe_ui.with_children(|ui| {
-            let seed = BASE64_STANDARD.encode(generator.get_seed());
             ui.spawn(NodeBundle {
                 style: Style {
-                    display: Display::Flex,
-                    flex_direction: FlexDirection::Column,
+                    border: UiRect::all(Val::Px(1.)),
+                    width: Val::Percent(100.),
+                    display: Display::Grid,
+                    grid_template_columns: vec![
+                        GridTrack::auto(),
+                        GridTrack::fr(1.0),
+                        GridTrack::auto(),
+                    ],
                     ..default()
                 },
+                //border_color:Color::RED.into(),
                 ..default()
             })
             .with_children(|ui| {
-                ui.spawn(TextBundle::from_section(
-                    format!("Seed: {}", seed),
-                    TextStyle {
-                        color: Color::WHITE,
-                        font_size: 24.0,
+                let seed = BASE64_STANDARD.encode(generator.get_seed());
+                ui.spawn(NodeBundle {
+                    style: Style {
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Column,
+                        grid_column: GridPlacement::start(1),
                         ..default()
                     },
-                ));
+                    ..default()
+                })
+                .with_children(|ui| {
+                    ui.spawn(TextBundle::from_section(
+                        format!("Seed: {}", seed),
+                        TextStyle {
+                            color: Color::WHITE,
+                            font_size: 24.0,
+                            ..default()
+                        },
+                    ));
 
-                ui.spawn(TextBundle::from_section(
-                    format!("Score: {}", 0.0),
-                    TextStyle {
-                        color: Color::WHITE,
-                        font_size: 24.0,
+                    ui.spawn(TextBundle::from_section(
+                        format!("Score: {}", 0.0),
+                        TextStyle {
+                            color: Color::WHITE,
+                            font_size: 24.0,
+                            ..default()
+                        },
+                    ))
+                    .insert(Score);
+                    ui.spawn(TextBundle::from_section(
+                        format!("Time: {:?}", Duration::from_secs(0)),
+                        TextStyle {
+                            color: Color::WHITE,
+                            font_size: 24.0,
+                            ..default()
+                        },
+                    ))
+                    .insert(TimeDisplay);
+                });
+                ui.spawn(NodeBundle {
+                    style: Style {
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Column,
+                        grid_column: GridPlacement::start(3),
+                        justify_content: JustifyContent::Center,
+                        height: Val::Percent(100.),
                         ..default()
                     },
-                ))
-                .insert(Score);
-                ui.spawn(TextBundle::from_section(
-                    format!("Time: {:?}", Duration::from_secs(0)),
-                    TextStyle {
-                        color: Color::WHITE,
-                        font_size: 24.0,
-                        ..default()
-                    },
-                ))
-                .insert(TimeDisplay);
+                    ..default()
+                })
+                .with_children(|skills| {
+                    skills.spawn((
+                        TextBundle::from_section(
+                            format!("Dash: {}", 0),
+                            TextStyle {
+                                color: Color::WHITE,
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        ),
+                        DashSkillDisplay,
+                    ));
+                    skills.spawn((
+                        TextBundle::from_section(
+                            format!("Jump: {}", 1),
+                            TextStyle {
+                                color: Color::WHITE,
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        ),
+                        JumpSkillDisplay,
+                    ));
+                });
             });
         });
     }
@@ -750,12 +840,14 @@ fn setup(mut commands: Commands, mut frame_pace_settings: ResMut<FramepaceSettin
             builder.spawn((
                 NodeBundle {
                     style: Style {
+                        border: UiRect::all(Val::Px(1.)),
                         height: Val::Percent(100.0),
                         max_width: Val::Vw(100.0),
                         aspect_ratio: Some(16.0 / 9.0),
                         ..default()
                     },
                     //background_color: BackgroundColor(Color::RED),
+                    //border_color:Color::YELLOW.into(),
                     ..default()
                 },
                 SafeUi,
