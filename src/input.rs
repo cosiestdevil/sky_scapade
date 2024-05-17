@@ -9,6 +9,7 @@ pub enum Action {
     Right,
     Jump,
     Dash,
+    Accept,
 }
 #[derive(Component)]
 pub struct Player{

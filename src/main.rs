@@ -111,8 +111,11 @@ fn main() {
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
+    app.add_systems(Update, (accept_upgrade).run_if(in_state(InGameState::Upgrade)));
     app.add_systems(OnEnter(InGameState::Paused), pause_level);
     app.add_systems(OnExit(InGameState::Paused), resume_level);
+    app.add_systems(OnEnter(InGameState::Upgrade), pause_level);
+    app.add_systems(OnExit(InGameState::Upgrade), resume_level);
     app.run();
 }
 
@@ -162,12 +165,25 @@ fn level_finish(
         next_state.set(InGameState::End);
     }
 }
+
+fn accept_upgrade(mut commands: Commands,mut next_state:ResMut<NextState<InGameState>>,action:Query<&ActionState<input::Action>>,screen:Query<Entity,With<UpgradeScreen>>){
+    let action_state = action.single();
+    if action_state.just_pressed(&input::Action::Accept){
+        commands.entity(screen.single()).despawn_recursive();
+        next_state.set(InGameState::Playing);
+    }
+}
+
+#[derive(Component)]
+struct UpgradeScreen;
 fn level_upgrade(
-    //mut commands: Commands,
+    mut commands: Commands,
     time: Res<Time>,
     mut level: Query<&mut Level>,
     mut player: Query<&mut Player>,
     mut generator: ResMut<generate::Generator>,
+    safe_ui: Query<Entity, With<crate::SafeUi>>,
+    mut next_state:ResMut<NextState<InGameState>>
 ) {
     let mut level = level.single_mut();
     level.upgrade_timer.tick(time.delta());
@@ -175,21 +191,52 @@ fn level_upgrade(
         let upgrade = generator.get_upgrade();
         log::info!("Upgrade:{:?}", upgrade);
         if let Some(upgrade) = upgrade {
+            
             let mut player = player.single_mut();
+            let mut display = "".to_owned();
             match upgrade {
                 UpgradeType::Speed(upgrade) => {
                     player.speed_modifiers.push(upgrade);
+                    display = format!("{} ({:?})","Speed Upgrade",upgrade.tier);
                 }
                 UpgradeType::JumpPower(upgrade) => {
                     player.jump_modifiers.push(upgrade);
+                    display = format!("{} ({:?})","Jump Power Upgrade",upgrade.tier);
                 }
                 UpgradeType::JumpSkill(skill) => {
                     player.jump_skill = skill;
+                    display = format!("{} ({:?})","Extra Jump Upgrade",skill.tier);
                 }
                 UpgradeType::DashSkill(skill) => {
                     player.dash_skill = skill;
+                    display = format!("{} ({:?})","Dash Upgrade",skill.tier);
                 }
                 _ => {}
+            }
+            let safe_ui = safe_ui.get_single();
+            if let Ok(safe_ui) = safe_ui {
+                let mut safe_ui = commands.entity(safe_ui);
+                safe_ui.with_children(|ui| {
+                    ui.spawn((
+                        NodeBundle {
+                            style: Style {
+                                position_type: PositionType::Absolute,
+                                width: Val::Percent(100.),
+                                height: Val::Percent(100.),
+                                display:Display::Grid,
+                                align_items:AlignItems::Center,
+                                justify_items:JustifyItems::Center,
+                                ..default()
+                            },
+                            ..default()
+                        },
+                        UpgradeScreen,
+                    ))
+                    .with_children(|screen| {
+                        screen.spawn(TextBundle::from_section(display, TextStyle{font_size:72.,..default()}));
+                    });
+                });
+                next_state.set(InGameState::Upgrade);
             }
         }
     }
@@ -387,7 +434,7 @@ fn move_player(
                     allow_in_air: player.dash_skill.air,
                     ..default()
                 });
-            } 
+            }
         }
     }
 
@@ -455,9 +502,12 @@ fn dash_skill_display(
     let player = player.single();
     match dashses.get_single_mut() {
         Ok(mut dashses_text) => {
-            let air = if player.dash_skill.air {" (Air)"}else{""};
-            dashses_text.sections[0].value =
-                format!("Dash: {}{}",player.dash_skill.max_dash - player.used_dashes,air);
+            let air = if player.dash_skill.air { " (Air)" } else { "" };
+            dashses_text.sections[0].value = format!(
+                "Dash: {}{}",
+                player.dash_skill.max_dash - player.used_dashes,
+                air
+            );
         }
         Err(_) => {}
     }
@@ -618,6 +668,7 @@ fn start_level(
         (input::Action::Left, KeyCode::KeyA),
         (input::Action::Right, KeyCode::KeyD),
         (input::Action::Dash, KeyCode::ShiftLeft),
+        (input::Action::Accept,KeyCode::Enter)
     ]);
     let player_mesh = meshes.add(Capsule3d::new(0.4, 2.));
     let player = commands
@@ -653,7 +704,7 @@ fn start_level(
         .insert(InputManagerBundle::with_map(input_map))
         .insert(TnuaSimpleAirActionsCounter::default())
         .insert(RigidBody::Dynamic)
-        .insert(LockedAxes::ROTATION_LOCKED)
+        .insert(LockedAxes::ROTATION_LOCKED | LockedAxes::TRANSLATION_LOCKED_Z)
         .insert(TransformBundle::from(Transform::from_xyz(
             1.5 * cube_size,
             hy + (3.5 * cube_size),

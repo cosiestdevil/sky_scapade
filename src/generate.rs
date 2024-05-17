@@ -120,6 +120,11 @@ impl Generator {
             tier:crate::UpgradeLevel::Advanced,
             air:true
         }), 50.);
+        result.upgrades.add_upgrade(UpgradeType::JumpSkill(crate::JumpSkill{
+            max_jumps:3,
+            tier:crate::UpgradeLevel::Enhanced,
+            air:true
+        }), 10.);
 
         result.upgrades.add_upgrade(
             UpgradeType::DashSkill(crate::DashSkill {
