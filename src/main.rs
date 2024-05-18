@@ -121,7 +121,7 @@ fn main() {
     app.add_systems(OnEnter(InGameState::Upgrade), pause_level);
     app.add_systems(OnExit(InGameState::Upgrade), resume_level);
     app.add_systems(OnEnter(InGameState::End), pause_level);
-    app.add_systems(OnExit(InGameState::End), resume_level);
+    app.add_systems(OnExit(InGameState::End), (resume_level, leave_end_screen));
     app.run();
 }
 
@@ -182,6 +182,10 @@ fn accept_upgrade(
     }
 }
 
+fn leave_end_screen(mut commands: Commands, screen: Query<Entity, With<EndScreen>>) {
+    commands.entity(screen.single()).despawn_recursive();
+}
+
 #[derive(Component)]
 struct EndScreen;
 #[derive(Component)]
@@ -192,7 +196,6 @@ fn level_upgrade(
     mut level: Query<&mut Level>,
     mut player: Query<&mut Player>,
     mut generator: ResMut<generate::Generator>,
-    safe_ui: Query<Entity, With<crate::SafeUi>>,
     mut next_state: ResMut<NextState<InGameState>>,
 ) {
     let mut level = level.single_mut();
@@ -221,37 +224,42 @@ fn level_upgrade(
                     display = format!("{} ({:?})", "Dash Upgrade", skill.tier);
                 }
             }
-            let safe_ui = safe_ui.get_single();
-            if let Ok(safe_ui) = safe_ui {
-                let mut safe_ui = commands.entity(safe_ui);
-                safe_ui.with_children(|ui| {
-                    ui.spawn((
-                        NodeBundle {
-                            style: Style {
-                                position_type: PositionType::Absolute,
-                                width: Val::Percent(100.),
-                                height: Val::Percent(100.),
-                                display: Display::Grid,
-                                align_items: AlignItems::Center,
-                                justify_items: JustifyItems::Center,
-                                ..default()
-                            },
+            // let safe_ui = safe_ui.get_single();
+            // if let Ok(safe_ui) = safe_ui {
+            //     let mut safe_ui = commands.entity(safe_ui);
+            //     safe_ui.with_children(|ui| {
+            commands
+                .spawn((
+                    NodeBundle {
+                        style: Style {
+                            position_type: PositionType::Absolute,
+                            width: Val::Percent(100.),
+                            height: Val::Percent(100.),
+                            display: Display::Grid,
+                            align_items: AlignItems::Center,
+                            justify_items: JustifyItems::Center,
                             ..default()
                         },
-                        UpgradeScreen,
-                    ))
-                    .with_children(|screen| {
-                        screen.spawn(TextBundle::from_section(
+                        background_color: Color::rgba(0., 0., 0., 0.6).into(),
+                        ..default()
+                    },
+                    UpgradeScreen,
+                ))
+                .with_children(|screen| {
+                    screen.spawn(
+                        TextBundle::from_section(
                             display,
                             TextStyle {
                                 font_size: 48.,
                                 ..default()
                             },
-                        ).with_text_justify(JustifyText::Center));
-                    });
+                        )
+                        .with_text_justify(JustifyText::Center),
+                    );
                 });
-                next_state.set(InGameState::Upgrade);
-            }
+            // });
+            next_state.set(InGameState::Upgrade);
+            //}
         }
     }
 }
@@ -474,42 +482,46 @@ fn killing_floor(
     mut commands: Commands,
     player: Query<(Entity, &Transform, &Player)>,
     mut next_state: ResMut<NextState<InGameState>>,
-    safe_ui: Query<Entity, With<crate::SafeUi>>,
+    //safe_ui: Query<Entity, With<crate::SafeUi>>,
 ) {
     let (_entity, player_transform, player) = player.single();
 
     if player_transform.translation.y < -10. {
-        let safe_ui = safe_ui.get_single();
-        if let Ok(safe_ui) = safe_ui {
-            let mut safe_ui = commands.entity(safe_ui);
-            safe_ui.with_children(|ui| {
-                ui.spawn((
-                    NodeBundle {
-                        style: Style {
-                            position_type: PositionType::Absolute,
-                            width: Val::Percent(100.),
-                            height: Val::Percent(100.),
-                            display: Display::Grid,
-                            align_items: AlignItems::Center,
-                            justify_items: JustifyItems::Center,
-                            ..default()
-                        },
+        //let safe_ui = safe_ui.get_single();
+        // if let Ok(safe_ui) = safe_ui {
+        //     let mut safe_ui = commands.entity(safe_ui);
+        //     safe_ui.with_children(|ui| {
+        commands
+            .spawn((
+                NodeBundle {
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        width: Val::Percent(100.),
+                        height: Val::Percent(100.),
+                        display: Display::Grid,
+                        align_items: AlignItems::Center,
+                        justify_items: JustifyItems::Center,
                         ..default()
                     },
-                    EndScreen,
-                ))
-                .with_children(|screen| {
-                    screen.spawn(TextBundle::from_section(
+                    background_color: Color::rgba(0., 0., 0., 0.6).into(),
+                    ..default()
+                },
+                EndScreen,
+            ))
+            .with_children(|screen| {
+                screen.spawn(
+                    TextBundle::from_section(
                         format!("Final Score\n{:.0}", player.score),
                         TextStyle {
-                            
                             font_size: 72.,
                             ..default()
                         },
-                    ).with_text_justify(JustifyText::Center));
-                });
+                    )
+                    .with_text_justify(JustifyText::Center),
+                );
             });
-        }
+        //});
+        //}
         next_state.set(InGameState::End);
     }
 }
@@ -951,7 +963,10 @@ fn temp(
             InGameState::Playing => next_state.set(InGameState::Paused),
             InGameState::Paused => next_state.set(InGameState::Playing),
             InGameState::Upgrade => {}
-            InGameState::End => next_app.set(AppState::MainMenu),
+            InGameState::End => {
+                next_state.set(InGameState::None);
+                next_app.set(AppState::MainMenu);
+            }
             InGameState::None => {}
         }
     }
