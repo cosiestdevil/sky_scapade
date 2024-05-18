@@ -32,31 +32,32 @@ impl NoiseSettings {
 }
 
 impl Generator {
+    #[allow(dead_code)]
     pub fn from_u64_seed(
         seed: u64,
         height_noise_settings: NoiseSettings,
         hole_noise_settings: NoiseSettings,
-        upgrades: Vec<UpgradeType>,
     ) -> Self {
         let rng = ChaCha20Rng::seed_from_u64(seed);
-        Self::new(rng, height_noise_settings, hole_noise_settings, upgrades)
+        Self::new(rng, height_noise_settings, hole_noise_settings)
     }
     pub fn from_entropy(
         height_noise_settings: NoiseSettings,
         hole_noise_settings: NoiseSettings,
-        upgrades: Vec<UpgradeType>,
+
     ) -> Self {
         let rng = ChaCha20Rng::from_entropy();
-        Self::new(rng, height_noise_settings, hole_noise_settings, upgrades)
+        Self::new(rng, height_noise_settings, hole_noise_settings)
     }
+    #[allow(dead_code)]
     pub fn from_seed(
         seed: [u8; 32],
         height_noise_settings: NoiseSettings,
         hole_noise_settings: NoiseSettings,
-        upgrades: Vec<UpgradeType>,
+
     ) -> Self {
         let rng = ChaCha20Rng::from_seed(seed);
-        Self::new(rng, height_noise_settings, hole_noise_settings, upgrades)
+        Self::new(rng, height_noise_settings, hole_noise_settings)
     }
     pub fn get_seed(&self) -> [u8; 32] {
         self.seed
@@ -65,7 +66,6 @@ impl Generator {
         rng: ChaCha20Rng,
         height_noise_settings: NoiseSettings,
         hole_noise_settings: NoiseSettings,
-        upgrades: Vec<UpgradeType>,
     ) -> Self {
         let mut height_rng = rng.clone();
         height_rng.set_stream(1);

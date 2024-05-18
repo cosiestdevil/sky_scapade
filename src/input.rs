@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
-use crate::{DashSkill, JumpSkill, StatUpgrade, UpgradeType};
+use crate::{DashSkill, JumpSkill, StatUpgrade};
 
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum Action {

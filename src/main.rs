@@ -33,6 +33,7 @@ use strum::EnumIter;
 mod generate;
 mod input;
 mod menu;
+mod system_info;
 mod upgrades;
 const GAME_NAME: &str = "SkyScapade";
 fn main() {
@@ -111,11 +112,16 @@ fn main() {
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
-    app.add_systems(Update, (accept_upgrade).run_if(in_state(InGameState::Upgrade)));
+    app.add_systems(
+        Update,
+        (accept_upgrade).run_if(in_state(InGameState::Upgrade)),
+    );
     app.add_systems(OnEnter(InGameState::Paused), pause_level);
     app.add_systems(OnExit(InGameState::Paused), resume_level);
     app.add_systems(OnEnter(InGameState::Upgrade), pause_level);
     app.add_systems(OnExit(InGameState::Upgrade), resume_level);
+    app.add_systems(OnEnter(InGameState::End), pause_level);
+    app.add_systems(OnExit(InGameState::End), resume_level);
     app.run();
 }
 
@@ -166,14 +172,21 @@ fn level_finish(
     }
 }
 
-fn accept_upgrade(mut commands: Commands,mut next_state:ResMut<NextState<InGameState>>,action:Query<&ActionState<input::Action>>,screen:Query<Entity,With<UpgradeScreen>>){
+fn accept_upgrade(
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<InGameState>>,
+    action: Query<&ActionState<input::Action>>,
+    screen: Query<Entity, With<UpgradeScreen>>,
+) {
     let action_state = action.single();
-    if action_state.just_pressed(&input::Action::Accept){
+    if action_state.just_pressed(&input::Action::Accept) {
         commands.entity(screen.single()).despawn_recursive();
         next_state.set(InGameState::Playing);
     }
 }
 
+#[derive(Component)]
+struct EndScreen;
 #[derive(Component)]
 struct UpgradeScreen;
 fn level_upgrade(
@@ -183,7 +196,7 @@ fn level_upgrade(
     mut player: Query<&mut Player>,
     mut generator: ResMut<generate::Generator>,
     safe_ui: Query<Entity, With<crate::SafeUi>>,
-    mut next_state:ResMut<NextState<InGameState>>
+    mut next_state: ResMut<NextState<InGameState>>,
 ) {
     let mut level = level.single_mut();
     level.upgrade_timer.tick(time.delta());
@@ -191,27 +204,25 @@ fn level_upgrade(
         let upgrade = generator.get_upgrade();
         log::info!("Upgrade:{:?}", upgrade);
         if let Some(upgrade) = upgrade {
-            
             let mut player = player.single_mut();
-            let mut display = "".to_owned();
+            let display;
             match upgrade {
                 UpgradeType::Speed(upgrade) => {
                     player.speed_modifiers.push(upgrade);
-                    display = format!("{} ({:?})","Speed Upgrade",upgrade.tier);
+                    display = format!("{} ({:?})", "Speed Upgrade", upgrade.tier);
                 }
                 UpgradeType::JumpPower(upgrade) => {
                     player.jump_modifiers.push(upgrade);
-                    display = format!("{} ({:?})","Jump Power Upgrade",upgrade.tier);
+                    display = format!("{} ({:?})", "Jump Power Upgrade", upgrade.tier);
                 }
                 UpgradeType::JumpSkill(skill) => {
                     player.jump_skill = skill;
-                    display = format!("{} ({:?})","Extra Jump Upgrade",skill.tier);
+                    display = format!("{} ({:?})", "Extra Jump Upgrade", skill.tier);
                 }
                 UpgradeType::DashSkill(skill) => {
                     player.dash_skill = skill;
-                    display = format!("{} ({:?})","Dash Upgrade",skill.tier);
+                    display = format!("{} ({:?})", "Dash Upgrade", skill.tier);
                 }
-                _ => {}
             }
             let safe_ui = safe_ui.get_single();
             if let Ok(safe_ui) = safe_ui {
@@ -223,9 +234,9 @@ fn level_upgrade(
                                 position_type: PositionType::Absolute,
                                 width: Val::Percent(100.),
                                 height: Val::Percent(100.),
-                                display:Display::Grid,
-                                align_items:AlignItems::Center,
-                                justify_items:JustifyItems::Center,
+                                display: Display::Grid,
+                                align_items: AlignItems::Center,
+                                justify_items: JustifyItems::Center,
                                 ..default()
                             },
                             ..default()
@@ -233,7 +244,13 @@ fn level_upgrade(
                         UpgradeScreen,
                     ))
                     .with_children(|screen| {
-                        screen.spawn(TextBundle::from_section(display, TextStyle{font_size:72.,..default()}));
+                        screen.spawn(TextBundle::from_section(
+                            display,
+                            TextStyle {
+                                font_size: 72.,
+                                ..default()
+                            },
+                        ));
                     });
                 });
                 next_state.set(InGameState::Upgrade);
@@ -352,12 +369,11 @@ fn generate_more_if_needed(
             let platform_assets = platform_assets.clone();
             if hole_streak > 4 {
                 hole_streak = 0;
-            } else {
-                if generator.is_hole(x) {
-                    hole_streak += 1;
-                    continue;
-                }
+            } else if generator.is_hole(x) {
+                hole_streak += 1;
+                continue;
             }
+
             commands
                 .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
                 .insert(PbrBundle {
@@ -470,12 +486,44 @@ fn cleanup_level(mut commands: Commands, level: Query<Entity, With<Level>>) {
 }
 
 fn killing_floor(
-    //mut commands: Commands,
-    player: Query<(Entity, &Transform), With<Player>>,
+    mut commands: Commands,
+    player: Query<(Entity, &Transform, &Player)>,
     mut next_state: ResMut<NextState<InGameState>>,
+    safe_ui: Query<Entity, With<crate::SafeUi>>,
 ) {
-    let (_entity, player) = player.single();
-    if player.translation.y < -10. {
+    let (_entity, player_transform, player) = player.single();
+
+    if player_transform.translation.y < -10. {
+        let safe_ui = safe_ui.get_single();
+        if let Ok(safe_ui) = safe_ui {
+            let mut safe_ui = commands.entity(safe_ui);
+            safe_ui.with_children(|ui| {
+                ui.spawn((
+                    NodeBundle {
+                        style: Style {
+                            position_type: PositionType::Absolute,
+                            width: Val::Percent(100.),
+                            height: Val::Percent(100.),
+                            display: Display::Grid,
+                            align_items: AlignItems::Center,
+                            justify_items: JustifyItems::Center,
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    EndScreen,
+                ))
+                .with_children(|screen| {
+                    screen.spawn(TextBundle::from_section(
+                        format!("Final Score\n{}", player.score),
+                        TextStyle {
+                            font_size: 72.,
+                            ..default()
+                        },
+                    ));
+                });
+            });
+        }
         next_state.set(InGameState::End);
     }
 }
@@ -527,7 +575,6 @@ fn start_level(
     let mut generator = generate::Generator::from_entropy(
         NoiseSettings::new(256, 64, 5),
         NoiseSettings::new(7, 64, 7),
-        vec![],
     );
     let platform_mesh: Handle<Mesh> = asset_server.load("platform.obj");
     let debug_material = materials.add(StandardMaterial {
@@ -668,7 +715,7 @@ fn start_level(
         (input::Action::Left, KeyCode::KeyA),
         (input::Action::Right, KeyCode::KeyD),
         (input::Action::Dash, KeyCode::ShiftLeft),
-        (input::Action::Accept,KeyCode::Enter)
+        (input::Action::Accept, KeyCode::Enter),
     ]);
     let player_mesh = meshes.add(Capsule3d::new(0.4, 2.));
     let player = commands
@@ -926,68 +973,6 @@ fn temp(
             InGameState::End => next_app.set(AppState::MainMenu),
             InGameState::None => {}
         }
-    }
-}
-
-mod system_info {
-    use bevy::prelude::*;
-    use bevy_ecs::{prelude::ResMut, system::Local};
-    use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
-
-    use bevy_diagnostic::{Diagnostic, DiagnosticPath, Diagnostics, DiagnosticsStore};
-
-    const BYTES_TO_GIB: f64 = 1.0 / 1024.0 / 1024.0 / 1024.0;
-
-    #[derive(Default)]
-    pub struct SystemInformationDiagnosticsPlugin;
-    impl Plugin for SystemInformationDiagnosticsPlugin {
-        fn build(&self, app: &mut App) {
-            app.add_systems(Startup, setup_system)
-                .add_systems(FixedUpdate, diagnostic_system);
-        }
-    }
-
-    impl SystemInformationDiagnosticsPlugin {
-        pub const CPU_USAGE: DiagnosticPath = DiagnosticPath::const_new("system/cpu_usage");
-        pub const MEM_USAGE: DiagnosticPath = DiagnosticPath::const_new("system/mem_usage");
-    }
-
-    pub(crate) fn setup_system(mut diagnostics: ResMut<DiagnosticsStore>) {
-        diagnostics
-            .add(Diagnostic::new(SystemInformationDiagnosticsPlugin::CPU_USAGE).with_suffix("%"));
-        diagnostics
-            .add(Diagnostic::new(SystemInformationDiagnosticsPlugin::MEM_USAGE).with_suffix("%"));
-    }
-
-    pub(crate) fn diagnostic_system(
-        mut diagnostics: Diagnostics,
-        mut sysinfo: Local<Option<System>>,
-    ) {
-        if sysinfo.is_none() {
-            *sysinfo = Some(System::new_with_specifics(
-                RefreshKind::new()
-                    .with_cpu(CpuRefreshKind::new().with_cpu_usage())
-                    .with_memory(MemoryRefreshKind::everything()),
-            ));
-        }
-        let Some(sys) = sysinfo.as_mut() else {
-            return;
-        };
-
-        sys.refresh_cpu_specifics(CpuRefreshKind::new().with_cpu_usage());
-        sys.refresh_memory();
-        let current_cpu_usage = sys.global_cpu_info().cpu_usage();
-        // `memory()` fns return a value in bytes
-        let total_mem = sys.total_memory() as f64 / BYTES_TO_GIB;
-        let used_mem = sys.used_memory() as f64 / BYTES_TO_GIB;
-        let current_used_mem = used_mem / total_mem * 100.0;
-
-        diagnostics.add_measurement(&SystemInformationDiagnosticsPlugin::CPU_USAGE, || {
-            current_cpu_usage as f64
-        });
-        diagnostics.add_measurement(&SystemInformationDiagnosticsPlugin::MEM_USAGE, || {
-            current_used_mem
-        });
     }
 }
 

@@ -34,6 +34,7 @@ impl Plugin for MenuPlugin {
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MainMenuState {
     Menu,
+    #[allow(dead_code)]
     NewGame,
     Settings,
 }

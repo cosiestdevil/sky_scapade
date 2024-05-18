@@ -1,7 +1,6 @@
 use core::panic;
 
 use bevy::log::info;
-use bevy::utils::info;
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 use std::fmt::Debug;
