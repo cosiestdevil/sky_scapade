@@ -244,10 +244,10 @@ fn level_upgrade(
                         screen.spawn(TextBundle::from_section(
                             display,
                             TextStyle {
-                                font_size: 72.,
+                                font_size: 48.,
                                 ..default()
                             },
-                        ));
+                        ).with_text_justify(JustifyText::Center));
                     });
                 });
                 next_state.set(InGameState::Upgrade);
@@ -333,7 +333,7 @@ fn update_score(
         player.score = player_transform.translation.x;
     }
     if let Ok(mut score_text) = score.get_single_mut() {
-        score_text.sections[0].value = format!("Score: {}", player.score);
+        score_text.sections[0].value = format!("Score: {:.0}", player.score);
     }
 }
 
@@ -500,12 +500,13 @@ fn killing_floor(
                 ))
                 .with_children(|screen| {
                     screen.spawn(TextBundle::from_section(
-                        format!("Final Score\n{}", player.score),
+                        format!("Final Score\n{:.0}", player.score),
                         TextStyle {
+                            
                             font_size: 72.,
                             ..default()
                         },
-                    ));
+                    ).with_text_justify(JustifyText::Center));
                 });
             });
         }
