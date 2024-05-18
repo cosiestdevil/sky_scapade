@@ -159,12 +159,9 @@ fn level_finish(
     let player = player.single();
     level.timer.tick(time.delta());
 
-    match time_text.get_single_mut() {
-        Ok(mut time_text) => {
-            let time = level.timer.elapsed().as_secs();
-            time_text.sections[0].value = format!("Time: {:02}:{:02}", time / 60, time % 60);
-        }
-        Err(_) => {}
+    if let Ok(mut time_text) = time_text.get_single_mut() {
+        let time = level.timer.elapsed().as_secs();
+        time_text.sections[0].value = format!("Time: {:02}:{:02}", time / 60, time % 60);
     }
     if level.timer.just_finished() {
         log::info!("Level Finished. Travelled: {}", player.translation.x);
@@ -302,30 +299,22 @@ struct StatUpgrade {
 impl upgrades::Upgrade<UpgradeType> for UpgradeType {
     fn is_lower(&self, other: UpgradeType) -> bool {
         match self {
-            UpgradeType::Speed(me) => {
-                return match other {
-                    UpgradeType::Speed(other) => me.tier <= other.tier,
-                    _ => false,
-                }
-            }
-            UpgradeType::JumpPower(me) => {
-                return match other {
-                    UpgradeType::JumpPower(other) => me.tier <= other.tier,
-                    _ => false,
-                }
-            }
-            UpgradeType::JumpSkill(me) => {
-                return match other {
-                    UpgradeType::JumpSkill(other) => me.tier <= other.tier,
-                    _ => false,
-                }
-            }
-            UpgradeType::DashSkill(me) => {
-                return match other {
-                    UpgradeType::DashSkill(other) => me.tier <= other.tier,
-                    _ => false,
-                }
-            }
+            UpgradeType::Speed(me) => match other {
+                UpgradeType::Speed(other) => me.tier <= other.tier,
+                _ => false,
+            },
+            UpgradeType::JumpPower(me) => match other {
+                UpgradeType::JumpPower(other) => me.tier <= other.tier,
+                _ => false,
+            },
+            UpgradeType::JumpSkill(me) => match other {
+                UpgradeType::JumpSkill(other) => me.tier <= other.tier,
+                _ => false,
+            },
+            UpgradeType::DashSkill(me) => match other {
+                UpgradeType::DashSkill(other) => me.tier <= other.tier,
+                _ => false,
+            },
         }
     }
 }
@@ -343,11 +332,8 @@ fn update_score(
     if player_transform.translation.x > player.score {
         player.score = player_transform.translation.x;
     }
-    match score.get_single_mut() {
-        Ok(mut score_text) => {
-            score_text.sections[0].value = format!("Score: {}", player.score);
-        }
-        Err(_) => {}
+    if let Ok(mut score_text) = score.get_single_mut() {
+        score_text.sections[0].value = format!("Score: {}", player.score);
     }
 }
 
@@ -434,24 +420,23 @@ fn move_player(
         float_height: 2.,
         ..Default::default()
     });
-    if action_state.just_pressed(&input::Action::Dash) {
-        if player.dash_skill.max_dash > player.used_dashes {
-            if !(!player.dash_skill.air && controller.is_airborne().unwrap()) {
-                if let None = player.dash_cooldown {
-                    player.dash_cooldown =
-                        Some(Timer::new(player.dash_skill.cooldown, TimerMode::Once));
-                }
-
-                player.used_dashes += 1;
-                info!("Used Dashes: {}", player.used_dashes);
-                controller.action(TnuaBuiltinDash {
-                    displacement: direction.normalize_or_zero() * player.max_speed() * 0.75,
-                    speed: player.max_speed() * 3.,
-                    allow_in_air: player.dash_skill.air,
-                    ..default()
-                });
-            }
+    if (!controller.is_airborne().unwrap() || player.dash_skill.air)
+        && player.dash_skill.max_dash > player.used_dashes
+        && action_state.just_pressed(&input::Action::Dash)
+    {
+        //if action_state.just_pressed(&input::Action::Dash) && player.dash_skill.max_dash > player.used_dashes && !(!player.dash_skill.air && controller.is_airborne().unwrap()) {
+        if player.dash_cooldown.is_none() {
+            player.dash_cooldown = Some(Timer::new(player.dash_skill.cooldown, TimerMode::Once));
         }
+
+        player.used_dashes += 1;
+        info!("Used Dashes: {}", player.used_dashes);
+        controller.action(TnuaBuiltinDash {
+            displacement: direction.normalize_or_zero() * player.max_speed() * 0.75,
+            speed: player.max_speed() * 3.,
+            allow_in_air: player.dash_skill.air,
+            ..default()
+        });
     }
 
     if action_state.pressed(&input::Action::Jump) {
@@ -535,11 +520,8 @@ struct JumpSkillDisplay;
 
 fn jump_skill_display(player: Query<&Player>, mut jumps: Query<&mut Text, With<JumpSkillDisplay>>) {
     let player = player.single();
-    match jumps.get_single_mut() {
-        Ok(mut jumps_text) => {
-            jumps_text.sections[0].value = format!("Jump: {}", player.jump_skill.max_jumps);
-        }
-        Err(_) => {}
+    if let Ok(mut jumps_text) = jumps.get_single_mut() {
+        jumps_text.sections[0].value = format!("Jump: {}", player.jump_skill.max_jumps);
     }
 }
 
@@ -548,27 +530,26 @@ fn dash_skill_display(
     mut dashses: Query<&mut Text, With<DashSkillDisplay>>,
 ) {
     let player = player.single();
-    match dashses.get_single_mut() {
-        Ok(mut dashses_text) => {
-            let air = if player.dash_skill.air { " (Air)" } else { "" };
-            dashses_text.sections[0].value = format!(
-                "Dash: {}{}",
-                player.dash_skill.max_dash - player.used_dashes,
-                air
-            );
-        }
-        Err(_) => {}
+    if let Ok(mut dashses_text) = dashses.get_single_mut() {
+        let air = if player.dash_skill.air { " (Air)" } else { "" };
+        dashses_text.sections[0].value = format!(
+            "Dash: {}{}",
+            player.dash_skill.max_dash - player.used_dashes,
+            air
+        );
     }
 }
-
+type StartLevelAssets<'a> = (
+    Res<'a, AssetServer>,
+    ResMut<'a, Assets<Image>>,
+    ResMut<'a, Assets<StandardMaterial>>,
+    ResMut<'a, Assets<Mesh>>,
+);
 fn start_level(
     mut commands: Commands,
     mut camera: Query<(Entity, &mut Transform), With<Camera>>,
     safe_ui: Query<Entity, With<crate::SafeUi>>,
-    asset_server: Res<AssetServer>,
-    mut images: ResMut<Assets<Image>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    assets: StartLevelAssets,
     mut next_state: ResMut<NextState<InGameState>>,
 ) {
     next_state.set(InGameState::Playing);
@@ -576,6 +557,7 @@ fn start_level(
         NoiseSettings::new(256, 64, 5),
         NoiseSettings::new(7, 64, 7),
     );
+    let (asset_server, mut images, mut materials, mut meshes) = assets;
     let platform_mesh: Handle<Mesh> = asset_server.load("platform.obj");
     let debug_material = materials.add(StandardMaterial {
         base_color_texture: Some(images.add(uv_debug_texture())),
@@ -799,11 +781,9 @@ fn start_level(
         let hy = (generator.get_height(x) as f32) * cube_size;
         if hole_streak > 4 {
             hole_streak = 0;
-        } else {
-            if generator.is_hole(x) {
-                hole_streak += 1;
-                continue;
-            }
+        } else if generator.is_hole(x) {
+            hole_streak += 1;
+            continue;
         }
         commands
             .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
