@@ -9,12 +9,25 @@ use bevy::{
     },
 };
 use bevy_framepace::{FramepaceSettings, Limiter};
+use bevy_persistent::prelude::*;
+use serde::{Deserialize, Serialize};
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
+        let config_dir = dirs::config_dir().unwrap().join(env!("CARGO_PKG_NAME"));
         app.insert_state(MainMenuState::Menu);
-        app.insert_resource(FrameLimitResource(FrameLimitOption::Off));
+        app.insert_resource(
+            Persistent::<SettingsResource>::builder()
+                .name("settings")
+                .format(StorageFormat::Toml)
+                .path(config_dir.join("settings.toml"))
+                .default(SettingsResource {
+                    frame_limit: FrameLimitOption::Off,
+                })
+                .build()
+                .expect("Failed to load settings"),
+        );
         app.add_systems(
             Update,
             (main_menu_button_system, settings_menu_button_system),
@@ -29,7 +42,6 @@ impl Plugin for MenuPlugin {
         app.add_systems(OnExit(MainMenuState::Settings), exit_settings);
     }
 }
-
 
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MainMenuState {
@@ -57,18 +69,17 @@ fn main_menu_fixed_update(mut camera_query: Query<(&mut Transform, &BackgroundLa
     }
     //let mut transform = camera_query.get_single_mut().unwrap();
 }
+
+type SettingsMenuButtonType<'a> = (
+    &'a Interaction,
+    &'a mut BackgroundColor,
+    &'a mut BorderColor,
+    &'a Children,
+    &'a SettingsMenuButtonComponent,
+);
 fn settings_menu_button_system(
-    mut interaction_query: Query<
-        (
-            &Interaction,
-            &mut BackgroundColor,
-            &mut BorderColor,
-            &Children,
-            &SettingsMenuButtonComponent,
-        ),
-        (Changed<Interaction>, With<Button>),
-    >,
-    mut frame_limit: ResMut<FrameLimitResource>,
+    mut interaction_query: Query<SettingsMenuButtonType, (Changed<Interaction>, With<Button>)>,
+    mut frame_limit: ResMut<Persistent<SettingsResource>>,
     mut frame_pace_settings: ResMut<FramepaceSettings>,
     mut next_menu: ResMut<NextState<MainMenuState>>,
     mut text_query: Query<&mut Text>,
@@ -82,26 +93,34 @@ fn settings_menu_button_system(
                 match button.0 {
                     SettingsMenuButton::Apply => next_menu.set(MainMenuState::Menu),
                     SettingsMenuButton::FrameLimit => {
-                        match frame_limit.0 {
+                        match frame_limit.frame_limit {
                             FrameLimitOption::Off => {
-                                frame_limit.0 = FrameLimitOption::Cinematic;
+                                frame_limit.update(|settings| {
+                                    settings.frame_limit = FrameLimitOption::Cinematic
+                                }).unwrap();
                                 frame_pace_settings.limiter = Limiter::from_framerate(30.0);
                                 text.sections[0].value = "Cinematic".into();
                             }
                             FrameLimitOption::Cinematic => {
-                                frame_limit.0 = FrameLimitOption::Standard;
+                                frame_limit.update(|settings| {
+                                    settings.frame_limit = FrameLimitOption::Standard
+                                }).unwrap();
                                 frame_pace_settings.limiter = Limiter::from_framerate(60.0);
                                 text.sections[0].value = "Standard".into();
                             }
                             FrameLimitOption::Standard => {
-                                frame_limit.0 = FrameLimitOption::High;
+                                frame_limit.update(|settings| {
+                                    settings.frame_limit = FrameLimitOption::High
+                                }).unwrap();
                                 frame_pace_settings.limiter = Limiter::from_framerate(120.0);
                                 text.sections[0].value = "High".into();
                             }
                             FrameLimitOption::High => {
-                                frame_limit.0 = FrameLimitOption::Off;
+                                frame_limit.update(|settings| {
+                                    settings.frame_limit = FrameLimitOption::Off
+                                }).unwrap();
                                 frame_pace_settings.limiter = Limiter::Off;
-                                text.sections[0].value = "Off".into();
+                                text.sections[0].value = "Infinite".into();
                             }
                         };
                     }
@@ -123,15 +142,28 @@ fn settings_menu_button_system(
 #[derive(Component)]
 struct MenuBackground;
 
+#[derive(Serialize, Deserialize)]
 enum FrameLimitOption {
     Off,
     Cinematic,
     Standard,
     High,
 }
+impl FrameLimitOption{
+    pub fn label(&self)->&'static str{
+        match self{
+            FrameLimitOption::Off => "Infinite",
+            FrameLimitOption::Cinematic => "Cinematic",
+            FrameLimitOption::Standard => "Standard",
+            FrameLimitOption::High => "High",
+        }
+    }
+}
 
-#[derive(Resource)]
-struct FrameLimitResource(FrameLimitOption);
+#[derive(Resource, Serialize, Deserialize)]
+struct SettingsResource {
+    frame_limit: FrameLimitOption,
+}
 
 enum BackgroundLayer {
     Background,
@@ -200,8 +232,12 @@ fn get_main_menu_menu_bundle() -> NodeBundle {
         ..default()
     }
 }
-fn enter_main_menu(safe_ui: Query<Entity, With<crate::SafeUi>>, mut commands: Commands, asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,) {
+fn enter_main_menu(
+    safe_ui: Query<Entity, With<crate::SafeUi>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     let menu_back_image: Handle<Image> =
         asset_server.load_with_settings("cyberpunk_back.png", |s: &mut ImageLoaderSettings| {
             match &mut s.sampler {
@@ -384,14 +420,17 @@ fn enter_main_menu(safe_ui: Query<Entity, With<crate::SafeUi>>, mut commands: Co
         });
     }
 }
-fn exit_main_menu(main_menu: Query<Entity, Or<(With<MainMenu>,With<MenuBackground>)>>, mut commands: Commands) {
+fn exit_main_menu(
+    main_menu: Query<Entity, Or<(With<MainMenu>, With<MenuBackground>)>>,
+    mut commands: Commands,
+) {
     let main_menu = main_menu.iter();
     for main_menu in main_menu {
         commands.entity(main_menu).despawn_recursive();
     }
 }
 
-fn enter_settings(main_menu: Query<Entity, With<MainMenu>>, mut commands: Commands) {
+fn enter_settings(main_menu: Query<Entity, With<MainMenu>>, mut commands: Commands,settings:Res<Persistent<SettingsResource>>) {
     let main_menu = main_menu.get_single();
     if let Ok(main_menu) = main_menu {
         let mut main_menu = commands.entity(main_menu);
@@ -419,7 +458,7 @@ fn enter_settings(main_menu: Query<Entity, With<MainMenu>>, mut commands: Comman
                                 },
                             ));
                             frame_rate.new_menu_button(
-                                "Off",
+                                settings.frame_limit.label(),
                                 SettingsMenuButtonComponent(SettingsMenuButton::FrameLimit),
                             );
                         });
@@ -449,4 +488,3 @@ enum SettingsMenuButton {
 
 #[derive(Component)]
 struct SettingsMenuButtonComponent(SettingsMenuButton);
-

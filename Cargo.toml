@@ -27,6 +27,9 @@ bevy_embedded_assets = "0.10.2"
 cosiest_noisiest ={path = "../cosiest_noisiest"}
 base64 = "0.22.1"
 strum ={version = "0.26.2",features = ["derive"]}
+bevy-persistent = { version = "0.5.0", features = ["toml"] }
+serde = { version = "1.0.202", features = ["derive"] }
+dirs = "5.0.1"
 
 [profile.release]
 opt-level = 3
