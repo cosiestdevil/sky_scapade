@@ -1,14 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use base64::prelude::*;
 use bevy::{
-    log,
-    prelude::*,
-    render::{
+    audio::Volume, log, prelude::*, render::{
         render_asset::RenderAssetUsages,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
-    },
-    window::PresentMode,
-    winit::{UpdateMode, WinitSettings},
+    }, window::PresentMode, winit::{UpdateMode, WinitSettings}
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
@@ -146,7 +142,7 @@ fn move_camera_based_on_speed(
     let mut camera = camera.single_mut();
     let player_velocity = velocities.single();
 
-    camera.translation.z = (cube_size * 20.) + (player_velocity.linvel.x.abs().sqrt() - 5.).max(0.);
+    camera.translation.z = (cube_size * 15.) + (player_velocity.linvel.x.abs().sqrt() + 5.).max(0.);
 }
 fn level_finish(
     mut level: Query<&mut Level>,
@@ -874,14 +870,21 @@ impl UiHelper for ChildBuilder<'_> {
     }
 }
 
-fn setup(mut commands: Commands, mut frame_pace_settings: ResMut<FramepaceSettings>) {
+fn setup(mut commands: Commands, mut frame_pace_settings: ResMut<FramepaceSettings>,asset_server: Res<AssetServer>) {
     frame_pace_settings.limiter = Limiter::Off;
     // spawn a camera to be able to see anything
     commands.spawn(Camera3dBundle {
         transform: Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::new(0., 0.0, 0.), Vec3::Y),
         ..default()
     });
-
+    commands.spawn(AudioBundle {
+        source: asset_server.load("Neon Heights.mp3"),
+        settings:PlaybackSettings{
+            mode:bevy::audio::PlaybackMode::Loop,
+            volume:Volume::new(0.4),
+            ..default()
+        }
+    });
     // create a simple Perf UI with default settings
     // and all entries provided by the crate:
     // commands.spawn((

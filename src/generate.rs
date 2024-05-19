@@ -90,7 +90,7 @@ impl Generator {
             upgrades: upgrades::WeightedUpgrades::new(upgrade_rng),
         };
 
-        let weight_offset = 0.2;
+        let weight_offset = 0.8;
         let mut weight = 100.;
         for (i,upgrade_level) in crate::UpgradeLevel::iter().enumerate() {
             if upgrade_level == crate::UpgradeLevel::None{
@@ -122,9 +122,9 @@ impl Generator {
         }), 50.);
         result.upgrades.add_upgrade(UpgradeType::JumpSkill(crate::JumpSkill{
             max_jumps:3,
-            tier:crate::UpgradeLevel::Enhanced,
+            tier:crate::UpgradeLevel::Master,
             air:true
-        }), 10.);
+        }), 20.);
 
         result.upgrades.add_upgrade(
             UpgradeType::DashSkill(crate::DashSkill {
