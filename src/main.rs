@@ -18,8 +18,7 @@ use bevy::{
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
-#[cfg(feature = "bevy_mod_taa")]
-use bevy_mod_taa::TAABundle;
+use bevy_hanabi::{ParticleEffect, ParticleEffectBundle};
 use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
 use bevy_tnua::{
@@ -71,7 +70,7 @@ fn main() {
             })
             .set(ImagePlugin::default_nearest()),
     )
-    .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+    .add_plugins(particles::ParticlePlugin)
     //.add_plugins(RapierDebugRenderPlugin::default())
     .insert_resource(WinitSettings {
         focused_mode: UpdateMode::Continuous,
@@ -145,12 +144,20 @@ struct PlatformAssets {
     mesh: Handle<Mesh>,
     material: Handle<StandardMaterial>,
 }
-
-fn pause_level(mut physics: ResMut<RapierConfiguration>) {
+use bevy_hanabi::prelude::*;
+fn pause_level(
+    mut physics: ResMut<RapierConfiguration>,
+    mut effect_time: ResMut<Time<EffectSimulation>>,
+) {
     physics.physics_pipeline_active = false;
+    effect_time.pause();
 }
-fn resume_level(mut physics: ResMut<RapierConfiguration>) {
+fn resume_level(
+    mut physics: ResMut<RapierConfiguration>,
+    mut effect_time: ResMut<Time<EffectSimulation>>,
+) {
     physics.physics_pipeline_active = true;
+    effect_time.unpause();
 }
 
 fn move_camera_based_on_speed(
@@ -695,6 +702,7 @@ fn start_level(
     mut next_state: ResMut<NextState<InGameState>>,
     mut discord_activity: ResMut<discord::ActivityState>,
     mut generator: ResMut<generate::Generator>,
+    effect_handles: Res<particles::Effects>,
 ) {
     next_state.set(InGameState::Playing);
 
@@ -913,6 +921,15 @@ fn start_level(
             0.,
         )))
         .set_parent(level)
+        .with_children(|player| {
+            if let Some(hover_particles) = &effect_handles.hover_particles {
+                player.spawn(ParticleEffectBundle {
+                    effect: ParticleEffect::new(hover_particles.clone()),
+                    transform: Transform::from_translation(Vec3::Y * -1.5),
+                    ..Default::default()
+                });
+            }
+        })
         .id();
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
@@ -1169,4 +1186,86 @@ pub enum InGameState {
     Upgrade,
     End,
     None,
+}
+mod particles {
+    use bevy::prelude::*;
+    use bevy_hanabi::prelude::*;
+
+    pub struct ParticlePlugin;
+
+    impl Plugin for ParticlePlugin {
+        fn build(&self, app: &mut App) {
+            app.add_plugins(HanabiPlugin);
+            app.add_systems(Startup, setup_effects);
+            app.insert_resource(Effects::default());
+        }
+    }
+
+    #[derive(Resource, Default)]
+    pub struct Effects {
+        pub hover_particles: Option<Handle<EffectAsset>>,
+    }
+
+    fn setup_effects(
+        mut effects: ResMut<Assets<EffectAsset>>,
+        mut effect_handles: ResMut<Effects>,
+    ) {
+        let mut gradient = Gradient::new();
+        gradient.add_key(0.0, Vec4::new(0.5, 0.5, 0.5, 1.));
+        gradient.add_key(1.0, Vec4::splat(0.));
+
+        // Create a new expression module
+        let mut module = Module::default();
+
+        // On spawn, randomly initialize the position of the particle
+        // to be over the surface of a sphere of radius 2 units.
+        let init_pos = SetPositionSphereModifier {
+            center: module.lit(Vec3::ZERO),
+            radius: module.lit(0.2),
+            dimension: ShapeDimension::Surface,
+        };
+
+        // Also initialize a radial initial velocity to 6 units/sec
+        // away from the (same) sphere center.
+        let init_vel = SetVelocitySphereModifier {
+            center: module.lit(Vec3::ZERO),
+            speed: module.lit(1.6),
+        };
+        let size = module.lit(0.1);
+        let init_size = SetAttributeModifier::new(Attribute::SIZE, size);
+
+        // Initialize the total lifetime of the particle, that is
+        // the time for which it's simulated and rendered. This modifier
+        // is almost always required, otherwise the particles won't show.
+        let lifetime = module.lit(1.); // literal value "10.0"
+        let init_lifetime = SetAttributeModifier::new(Attribute::LIFETIME, lifetime);
+
+        // Every frame, add a gravity-like acceleration downward
+        let accel = module.lit(Vec3::new(0., -1., 0.));
+        let update_accel = AccelModifier::new(accel);
+
+        // Create the effect asset
+        let effect = EffectAsset::new(
+            // Maximum number of particles alive at a time
+            vec![32768],
+            // Spawn at a rate of 5 particles per second
+            Spawner::rate(50.0.into()),
+            // Move the expression module into the asset
+            module,
+        )
+        .with_name("MyEffect")
+        .init(init_pos)
+        .init(init_vel)
+        .init(init_size)
+        .init(init_lifetime)
+        .update(update_accel)
+        // Render the particles with a color gradient over their
+        // lifetime. This maps the gradient key 0 to the particle spawn
+        // time, and the gradient key 1 to the particle death (10s).
+        .render(ColorOverLifetimeModifier { gradient });
+
+        // Insert into the asset system
+        let effect_handle = effects.add(effect);
+        effect_handles.hover_particles = Some(effect_handle);
+    }
 }
