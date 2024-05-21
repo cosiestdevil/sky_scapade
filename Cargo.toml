@@ -30,6 +30,7 @@ strum ={version = "0.26.2",features = ["derive"]}
 bevy-persistent = { version = "0.5.0", features = ["toml"] }
 serde = { version = "1.0.202", features = ["derive"] }
 dirs = "5.0.1"
+discord-rich-presence = "0.2.4"
 
 [profile.release]
 opt-level = 3

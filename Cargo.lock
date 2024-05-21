@@ -874,7 +874,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.60",
- "uuid",
+ "uuid 1.8.0",
 ]
 
 [[package]]
@@ -951,7 +951,7 @@ dependencies = [
  "bevy_utils",
  "serde",
  "thiserror",
- "uuid",
+ "uuid 1.8.0",
 ]
 
 [[package]]
@@ -1090,7 +1090,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "tracing",
- "uuid",
+ "uuid 1.8.0",
  "web-time",
 ]
 
@@ -1706,6 +1706,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "discord-rich-presence"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f632a41e3e97febf8edff46b1405f9875894c29e20a25c5abe566872226b3f84"
+dependencies = [
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "uuid 0.8.2",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1976,7 +1988,7 @@ dependencies = [
  "fnv",
  "gilrs-core",
  "log",
- "uuid",
+ "uuid 1.8.0",
  "vec_map",
 ]
 
@@ -1994,7 +2006,7 @@ dependencies = [
  "libudev-sys",
  "log",
  "nix",
- "uuid",
+ "uuid 1.8.0",
  "vec_map",
  "wasm-bindgen",
  "web-sys",
@@ -2729,6 +2741,7 @@ dependencies = [
  "bevy_rapier3d",
  "cosiest_noisiest",
  "dirs",
+ "discord-rich-presence",
  "iyes_perf_ui",
  "leafwing-input-manager",
  "rand",
@@ -3979,6 +3992,15 @@ name = "unicode-xid"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f962df74c8c05a667b5ee8bcf162993134c104e96440b663c8daa176dc772d8c"
+
+[[package]]
+name = "uuid"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "uuid"

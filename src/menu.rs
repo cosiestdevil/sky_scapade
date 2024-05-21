@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use crate::UiHelper;
+use crate::{discord::ActivityState, UiHelper};
 use bevy::{
     prelude::*,
     render::{
@@ -57,7 +57,11 @@ enum MainMenuButton {
 #[derive(Component)]
 struct MainMenuButtonComponent(MainMenuButton);
 
-fn main_menu_fixed_update(mut camera_query: Query<(&mut Transform, &BackgroundLayerComponent)>) {
+fn main_menu_fixed_update(
+    mut camera_query: Query<(&mut Transform, &BackgroundLayerComponent)>,
+   // mut discord_activity: ResMut<ActivityState>,
+) {
+    //discord_activity.state = Some("In Main Menu".into());
     for (mut transform, layer) in camera_query.iter_mut() {
         let base_angle = PI / 5760.;
         match layer.0 {
@@ -95,30 +99,36 @@ fn settings_menu_button_system(
                     SettingsMenuButton::FrameLimit => {
                         match frame_limit.frame_limit {
                             FrameLimitOption::Off => {
-                                frame_limit.update(|settings| {
-                                    settings.frame_limit = FrameLimitOption::Cinematic
-                                }).unwrap();
+                                frame_limit
+                                    .update(|settings| {
+                                        settings.frame_limit = FrameLimitOption::Cinematic
+                                    })
+                                    .unwrap();
                                 frame_pace_settings.limiter = Limiter::from_framerate(30.0);
                                 text.sections[0].value = "Cinematic".into();
                             }
                             FrameLimitOption::Cinematic => {
-                                frame_limit.update(|settings| {
-                                    settings.frame_limit = FrameLimitOption::Standard
-                                }).unwrap();
+                                frame_limit
+                                    .update(|settings| {
+                                        settings.frame_limit = FrameLimitOption::Standard
+                                    })
+                                    .unwrap();
                                 frame_pace_settings.limiter = Limiter::from_framerate(60.0);
                                 text.sections[0].value = "Standard".into();
                             }
                             FrameLimitOption::Standard => {
-                                frame_limit.update(|settings| {
-                                    settings.frame_limit = FrameLimitOption::High
-                                }).unwrap();
+                                frame_limit
+                                    .update(|settings| {
+                                        settings.frame_limit = FrameLimitOption::High
+                                    })
+                                    .unwrap();
                                 frame_pace_settings.limiter = Limiter::from_framerate(120.0);
                                 text.sections[0].value = "High".into();
                             }
                             FrameLimitOption::High => {
-                                frame_limit.update(|settings| {
-                                    settings.frame_limit = FrameLimitOption::Off
-                                }).unwrap();
+                                frame_limit
+                                    .update(|settings| settings.frame_limit = FrameLimitOption::Off)
+                                    .unwrap();
                                 frame_pace_settings.limiter = Limiter::Off;
                                 text.sections[0].value = "Infinite".into();
                             }
@@ -149,9 +159,9 @@ enum FrameLimitOption {
     Standard,
     High,
 }
-impl FrameLimitOption{
-    pub fn label(&self)->&'static str{
-        match self{
+impl FrameLimitOption {
+    pub fn label(&self) -> &'static str {
+        match self {
             FrameLimitOption::Off => "Infinite",
             FrameLimitOption::Cinematic => "Cinematic",
             FrameLimitOption::Standard => "Standard",
@@ -237,7 +247,11 @@ fn enter_main_menu(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut discord_activity: ResMut<ActivityState>,
 ) {
+    discord_activity.state = Some("In Main Menu".into());
+    discord_activity.details = None;
+    discord_activity.start = None;
     let menu_back_image: Handle<Image> =
         asset_server.load_with_settings("cyberpunk_back.png", |s: &mut ImageLoaderSettings| {
             match &mut s.sampler {
@@ -430,7 +444,11 @@ fn exit_main_menu(
     }
 }
 
-fn enter_settings(main_menu: Query<Entity, With<MainMenu>>, mut commands: Commands,settings:Res<Persistent<SettingsResource>>) {
+fn enter_settings(
+    main_menu: Query<Entity, With<MainMenu>>,
+    mut commands: Commands,
+    settings: Res<Persistent<SettingsResource>>,
+) {
     let main_menu = main_menu.get_single();
     if let Ok(main_menu) = main_menu {
         let mut main_menu = commands.entity(main_menu);

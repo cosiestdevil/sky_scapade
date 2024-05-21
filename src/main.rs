@@ -1,10 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use base64::prelude::*;
 use bevy::{
-    audio::Volume, log, prelude::*, render::{
+    audio::Volume,
+    log,
+    prelude::*,
+    render::{
         render_asset::RenderAssetUsages,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
-    }, window::PresentMode, winit::{UpdateMode, WinitSettings}
+    },
+    window::PresentMode,
+    winit::{UpdateMode, WinitSettings},
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
@@ -18,13 +23,14 @@ use bevy_tnua::{
     TnuaAction,
 };
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
+use discord::DiscordPlugin;
 use generate::NoiseSettings;
 use input::Player;
 use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
     action_state::ActionState, input_map::InputMap, plugin::InputManagerPlugin, InputManagerBundle,
 };
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strum::EnumIter;
 mod generate;
 mod input;
@@ -37,6 +43,7 @@ fn main() {
     app.add_plugins(EmbeddedAssetPlugin {
         mode: bevy_embedded_assets::PluginMode::ReplaceDefault,
     });
+    app.add_plugins(DiscordPlugin);
     app.add_plugins(
         DefaultPlugins
             .set(WindowPlugin {
@@ -560,6 +567,7 @@ fn start_level(
     safe_ui: Query<Entity, With<crate::SafeUi>>,
     assets: StartLevelAssets,
     mut next_state: ResMut<NextState<InGameState>>,
+    mut discord_activity: ResMut<discord::ActivityState>,
 ) {
     next_state.set(InGameState::Playing);
     let mut generator = generate::Generator::from_entropy(
@@ -572,7 +580,17 @@ fn start_level(
         base_color_texture: Some(images.add(uv_debug_texture())),
         ..default()
     });
-
+    discord_activity.state = Some("Playing Solo".into());
+    discord_activity.details = Some(format!(
+        "Seed: {}",
+        BASE64_STANDARD.encode(generator.get_seed())
+    ));
+    discord_activity.start = Some(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs().try_into().unwrap(),
+    );
     let platform_assets = PlatformAssets {
         mesh: platform_mesh.clone(),
         material: debug_material.clone(),
@@ -870,7 +888,11 @@ impl UiHelper for ChildBuilder<'_> {
     }
 }
 
-fn setup(mut commands: Commands, mut frame_pace_settings: ResMut<FramepaceSettings>,asset_server: Res<AssetServer>) {
+fn setup(
+    mut commands: Commands,
+    mut frame_pace_settings: ResMut<FramepaceSettings>,
+    asset_server: Res<AssetServer>,
+) {
     frame_pace_settings.limiter = Limiter::Off;
     // spawn a camera to be able to see anything
     commands.spawn(Camera3dBundle {
@@ -879,11 +901,11 @@ fn setup(mut commands: Commands, mut frame_pace_settings: ResMut<FramepaceSettin
     });
     commands.spawn(AudioBundle {
         source: asset_server.load("Neon Heights.mp3"),
-        settings:PlaybackSettings{
-            mode:bevy::audio::PlaybackMode::Loop,
-            volume:Volume::new(0.4),
+        settings: PlaybackSettings {
+            mode: bevy::audio::PlaybackMode::Loop,
+            volume: Volume::new(0.4),
             ..default()
-        }
+        },
     });
     // create a simple Perf UI with default settings
     // and all entries provided by the crate:
@@ -982,4 +1004,55 @@ pub enum InGameState {
     Upgrade,
     End,
     None,
+}
+
+mod discord {
+    use bevy::prelude::*;
+    use discord_rich_presence::{activity::{self, Timestamps}, DiscordIpc, DiscordIpcClient};
+    pub struct DiscordPlugin;
+    #[derive(Resource, Deref, DerefMut)]
+    pub struct DiscordClient(DiscordIpcClient);
+
+    impl Plugin for DiscordPlugin {
+        fn build(&self, app: &mut App) {
+            let client = DiscordIpcClient::new(include_str!("DISCORD_CLIENT.ID")).unwrap();
+            app.init_resource::<ActivityState>();
+            app.insert_resource(DiscordClient(client));
+            app.add_systems(Startup, startup_client);
+            app.add_systems(FixedUpdate, check_activity_changed);
+        }
+    }
+    fn startup_client(mut client: ResMut<DiscordClient>) {
+        client.connect().unwrap();
+    }
+    fn check_activity_changed(activity: Res<ActivityState>, mut client: ResMut<DiscordClient>) {
+        if activity.is_changed() {
+            let mut discord_activity: activity::Activity = activity::Activity::new();
+            if let Some(state) = &activity.state {
+                discord_activity = discord_activity.state(state);
+            }
+            if let Some(details) = &activity.details {
+                discord_activity = discord_activity.details(details);
+            }
+            if let Some(start) = &activity.start{
+                discord_activity = discord_activity.timestamps(Timestamps::new().start(*start));
+            }
+            let res = client.set_activity(discord_activity);
+
+            if let Err(why) = res {
+                error!("Failed to set presence: {}", why);
+            }
+        }
+    }
+    #[derive(Debug, Resource, Default, Clone)]
+    pub struct ActivityState {
+        /// The player's current party status
+        pub state: Option<String>,
+        /// What the player is currently doing
+        pub details: Option<String>,
+        /// Whether this activity is an instanced context, like a match
+        pub instance: Option<bool>,
+        /// Start time of Activity
+        pub start: Option<i64>,
+    }
 }
