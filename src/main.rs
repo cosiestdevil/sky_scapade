@@ -6,14 +6,14 @@ use bevy::{
     prelude::*,
     render::{
         render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat}, view::window,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
     },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
-use bevy_framepace::{FramepaceSettings, Limiter};
+use bevy_framepace::FramepaceSettings;
 use bevy_obj::ObjPlugin;
 use bevy_persistent::Persistent;
 use bevy_rapier3d::prelude::*;

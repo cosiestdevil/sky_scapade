@@ -1,4 +1,4 @@
-use std::{default, f32::consts::PI};
+use std::f32::consts::PI;
 
 use crate::{discord::ActivityState, UiHelper};
 use bevy::{
@@ -83,7 +83,7 @@ type SettingsMenuButtonType<'a> = (
     &'a SettingsMenuButtonComponent,
 );
 fn settings_menu_button_system(
-    mut interaction_query: Query<SettingsMenuButtonType, (Changed<Interaction>, With<Button>)>,
+    mut interaction_query: Query<SettingsMenuButtonType, ButtonInteractionFilter>,
     mut settings: ResMut<Persistent<SettingsResource>>,
     mut frame_pace_settings: ResMut<FramepaceSettings>,
     mut next_menu: ResMut<NextState<MainMenuState>>,
@@ -221,7 +221,7 @@ enum BackgroundLayer {
 }
 #[derive(Component)]
 struct BackgroundLayerComponent(BackgroundLayer);
-
+type ButtonInteractionFilter = (Changed<Interaction>, With<Button>);
 fn main_menu_button_system(
     mut interaction_query: Query<
         (
@@ -231,7 +231,7 @@ fn main_menu_button_system(
             &Children,
             &MainMenuButtonComponent,
         ),
-        (Changed<Interaction>, With<Button>),
+        ButtonInteractionFilter,
     >,
     mut next_state: ResMut<NextState<crate::AppState>>,
     mut next_menu: ResMut<NextState<MainMenuState>>,
@@ -475,8 +475,9 @@ fn enter_main_menu(
         });
     }
 }
+type ExitMainMenuFilter = Or<(With<MainMenu>, With<MenuBackground>)>;
 fn exit_main_menu(
-    main_menu: Query<Entity, Or<(With<MainMenu>, With<MenuBackground>)>>,
+    main_menu: Query<Entity,ExitMainMenuFilter >,
     mut commands: Commands,
 ) {
     let main_menu = main_menu.iter();
