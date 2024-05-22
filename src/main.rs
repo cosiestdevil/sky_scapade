@@ -13,9 +13,7 @@ use bevy::{
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
-use bevy_framepace::FramepaceSettings;
 use bevy_obj::ObjPlugin;
-use bevy_persistent::Persistent;
 use bevy_rapier3d::prelude::*;
 use bevy_tnua::{
     builtins::{TnuaBuiltinDash, TnuaBuiltinJump, TnuaBuiltinWalk},
@@ -38,6 +36,7 @@ mod input;
 mod menu;
 mod system_info;
 mod upgrades;
+mod settings;
 const GAME_NAME: &str = "SkyScapade";
 fn main() {
     let mut app = App::new();
@@ -78,6 +77,7 @@ fn main() {
         },
     })
     .add_plugins(menu::MenuPlugin)
+    .add_plugins(settings::SettingsPlugin)
     .add_plugins(ObjPlugin)
     .insert_state(AppState::MainMenu)
     //.add_plugins(ScreenDiagnosticsPlugin::default())
@@ -891,14 +891,10 @@ impl UiHelper for ChildBuilder<'_> {
 
 fn setup(
     mut commands: Commands,
-    settings: Res<Persistent::<menu::SettingsResource>>,
     mut window: Query<&mut Window>,
-    mut frame_pace_settings: ResMut<FramepaceSettings>,
     asset_server: Res<AssetServer>,
 ) {
-    frame_pace_settings.limiter = settings.frame_limit.into();
     let mut window = window.single_mut();
-    window.mode = settings.window_mode.into();
     window.visible = true;
     // spawn a camera to be able to see anything
     commands.spawn(Camera3dBundle {

@@ -5,29 +5,16 @@ use bevy::{
     app::AppExit, prelude::*, render::{
         render_resource::{encase::vector::FromVectorParts, Face},
         texture::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
-    }, window::WindowMode
+    }
 };
-use bevy_framepace::{FramepaceSettings, Limiter};
-use bevy_persistent::prelude::*;
-use serde::{Deserialize, Serialize};
+use bevy_framepace::FramepaceSettings;
+
+
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
-        let config_dir = dirs::config_dir().unwrap().join(env!("CARGO_PKG_NAME"));
         app.insert_state(MainMenuState::Menu);
-        app.insert_resource(
-            Persistent::<SettingsResource>::builder()
-                .name("settings")
-                .format(StorageFormat::Toml)
-                .path(config_dir.join("settings.toml"))
-                .default(SettingsResource {
-                    frame_limit: FrameLimitOption::Off,
-                    window_mode: WindowModeOption::Windowed,
-                })
-                .build()
-                .expect("Failed to load settings"),
-        );
         app.add_systems(
             Update,
             (main_menu_button_system, settings_menu_button_system),
@@ -84,7 +71,7 @@ type SettingsMenuButtonType<'a> = (
 );
 fn settings_menu_button_system(
     mut interaction_query: Query<SettingsMenuButtonType, ButtonInteractionFilter>,
-    mut settings: ResMut<Persistent<SettingsResource>>,
+    mut settings: ResMut<crate::settings::SettingsResource>,
     mut frame_pace_settings: ResMut<FramepaceSettings>,
     mut next_menu: ResMut<NextState<MainMenuState>>,
     mut text_query: Query<&mut Text>,
@@ -135,83 +122,8 @@ fn settings_menu_button_system(
 #[derive(Component)]
 struct MenuBackground;
 
-#[derive(Serialize, Deserialize, Default, Clone, Copy)]
-pub enum FrameLimitOption {
-    #[default]
-    Off,
-    Cinematic,
-    Standard,
-    High,
-}
-impl FrameLimitOption {
-    pub fn label(&self) -> &'static str {
-        match self {
-            FrameLimitOption::Off => "Infinite",
-            FrameLimitOption::Cinematic => "Cinematic",
-            FrameLimitOption::Standard => "Standard",
-            FrameLimitOption::High => "High",
-        }
-    }
 
-    pub fn next(&self) -> Self {
-        match self {
-            FrameLimitOption::Off => Self::Cinematic,
-            FrameLimitOption::Cinematic => Self::Standard,
-            FrameLimitOption::Standard => Self::High,
-            FrameLimitOption::High => Self::Off,
-        }
-    }
-}
-impl From<FrameLimitOption> for Limiter {
-    fn from(value: FrameLimitOption) -> Self {
-        match value {
-            FrameLimitOption::Off => Limiter::Off,
-            FrameLimitOption::Cinematic => Limiter::from_framerate(30.0),
-            FrameLimitOption::Standard => Limiter::from_framerate(60.0),
-            FrameLimitOption::High => Limiter::from_framerate(120.0),
-        }
-    }
-}
-#[derive(Serialize, Deserialize, Default, Clone, Copy)]
-pub enum WindowModeOption {
-    #[default]
-    Windowed,
-    BorderlessFullscreen,
-    Fullscreen,
-}
-impl WindowModeOption {
-    pub fn label(&self) -> &'static str {
-        match self {
-            WindowModeOption::Windowed => "Windowed",
-            WindowModeOption::BorderlessFullscreen => "Borderless",
-            WindowModeOption::Fullscreen => "Fullscreen",
-        }
-    }
-    pub fn next(&self)->Self{
-        match self{
-            WindowModeOption::Windowed => WindowModeOption::BorderlessFullscreen,
-            WindowModeOption::BorderlessFullscreen => WindowModeOption::Fullscreen,
-            WindowModeOption::Fullscreen => WindowModeOption::Windowed,
-        }
-    }
-}
-impl From<WindowModeOption> for WindowMode {
-    fn from(value: WindowModeOption) -> Self {
-        match value {
-            WindowModeOption::Windowed => WindowMode::Windowed,
-            WindowModeOption::BorderlessFullscreen => WindowMode::BorderlessFullscreen,
-            WindowModeOption::Fullscreen => WindowMode::Fullscreen,
-        }
-    }
-}
 
-#[derive(Resource, Serialize, Deserialize, Default)]
-pub struct SettingsResource {
-    #[serde(default)]
-    pub frame_limit: FrameLimitOption,
-    #[serde(default)]
-    pub window_mode: WindowModeOption,
-}
 
 enum BackgroundLayer {
     Background,
@@ -489,7 +401,7 @@ fn exit_main_menu(
 fn enter_settings(
     main_menu: Query<Entity, With<MainMenu>>,
     mut commands: Commands,
-    settings: Res<Persistent<SettingsResource>>,
+    settings: Res<crate::settings::SettingsResource>,
 ) {
     let main_menu = main_menu.get_single();
     if let Ok(main_menu) = main_menu {
