@@ -142,14 +142,14 @@ fn resume_level(mut physics: ResMut<RapierConfiguration>) {
 }
 
 fn move_camera_based_on_speed(
-    mut camera: Query<&mut Transform, With<Camera>>,
+    mut query_camera: Query<&mut Projection, With<Camera>>,
     velocities: Query<&Velocity, With<Player>>,
 ) {
-    let cube_size = 1.0f32;
-    let mut camera = camera.single_mut();
+    let Projection::Perspective(persp) = query_camera.single_mut().into_inner() else {
+        return;
+    };
     let player_velocity = velocities.single();
-
-    camera.translation.z = (cube_size * 15.) + (player_velocity.linvel.x.abs().sqrt() + 5.).max(0.);
+    persp.fov = (std::f32::consts::PI/4.0)*player_velocity.linvel.x.abs().powf(0.125).max(1.);
 }
 fn level_finish(
     mut level: Query<&mut Level>,
