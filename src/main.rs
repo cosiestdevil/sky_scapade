@@ -395,8 +395,6 @@ fn dash_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
         cooldown.tick(time.delta());
         if cooldown.just_finished() {
             player.used_dashes -= 1;
-            //info!("Dash Cooldown");
-            info!("Used Dashes: {}", player.used_dashes);
             if player.used_dashes == 0 {
                 player.dash_cooldown = None;
             } else {
@@ -441,11 +439,11 @@ fn move_player(
         }
 
         player.used_dashes += 1;
-        info!("Used Dashes: {}", player.used_dashes);
         controller.action(TnuaBuiltinDash {
             displacement: direction.normalize_or_zero() * player.max_speed() * 0.75,
             speed: player.max_speed() * 3.,
             allow_in_air: player.dash_skill.air,
+            brake_to_speed:player.max_speed(),
             ..default()
         });
     }
