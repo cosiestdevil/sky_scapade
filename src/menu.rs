@@ -1,12 +1,11 @@
-use std::f32::consts::PI;
+use std::{default, f32::consts::PI};
 
 use crate::{discord::ActivityState, UiHelper};
 use bevy::{
-    prelude::*,
-    render::{
+    app::AppExit, prelude::*, render::{
         render_resource::{encase::vector::FromVectorParts, Face},
         texture::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
-    },
+    }, window::WindowMode
 };
 use bevy_framepace::{FramepaceSettings, Limiter};
 use bevy_persistent::prelude::*;
@@ -24,6 +23,7 @@ impl Plugin for MenuPlugin {
                 .path(config_dir.join("settings.toml"))
                 .default(SettingsResource {
                     frame_limit: FrameLimitOption::Off,
+                    window_mode: WindowModeOption::Windowed,
                 })
                 .build()
                 .expect("Failed to load settings"),
@@ -53,13 +53,14 @@ pub enum MainMenuState {
 enum MainMenuButton {
     NewGame,
     Settings,
+    Exit
 }
 #[derive(Component)]
 struct MainMenuButtonComponent(MainMenuButton);
 
 fn main_menu_fixed_update(
     mut camera_query: Query<(&mut Transform, &BackgroundLayerComponent)>,
-   // mut discord_activity: ResMut<ActivityState>,
+    // mut discord_activity: ResMut<ActivityState>,
 ) {
     //discord_activity.state = Some("In Main Menu".into());
     for (mut transform, layer) in camera_query.iter_mut() {
@@ -83,11 +84,13 @@ type SettingsMenuButtonType<'a> = (
 );
 fn settings_menu_button_system(
     mut interaction_query: Query<SettingsMenuButtonType, (Changed<Interaction>, With<Button>)>,
-    mut frame_limit: ResMut<Persistent<SettingsResource>>,
+    mut settings: ResMut<Persistent<SettingsResource>>,
     mut frame_pace_settings: ResMut<FramepaceSettings>,
     mut next_menu: ResMut<NextState<MainMenuState>>,
     mut text_query: Query<&mut Text>,
+    mut windows: Query<&mut Window>,
 ) {
+    let mut window = windows.single_mut();
     for (interaction, mut color, mut border_color, children, button) in &mut interaction_query {
         let mut text = text_query.get_mut(children[0]).unwrap();
         match *interaction {
@@ -97,42 +100,22 @@ fn settings_menu_button_system(
                 match button.0 {
                     SettingsMenuButton::Apply => next_menu.set(MainMenuState::Menu),
                     SettingsMenuButton::FrameLimit => {
-                        match frame_limit.frame_limit {
-                            FrameLimitOption::Off => {
-                                frame_limit
-                                    .update(|settings| {
-                                        settings.frame_limit = FrameLimitOption::Cinematic
-                                    })
-                                    .unwrap();
-                                frame_pace_settings.limiter = Limiter::from_framerate(30.0);
-                                text.sections[0].value = "Cinematic".into();
-                            }
-                            FrameLimitOption::Cinematic => {
-                                frame_limit
-                                    .update(|settings| {
-                                        settings.frame_limit = FrameLimitOption::Standard
-                                    })
-                                    .unwrap();
-                                frame_pace_settings.limiter = Limiter::from_framerate(60.0);
-                                text.sections[0].value = "Standard".into();
-                            }
-                            FrameLimitOption::Standard => {
-                                frame_limit
-                                    .update(|settings| {
-                                        settings.frame_limit = FrameLimitOption::High
-                                    })
-                                    .unwrap();
-                                frame_pace_settings.limiter = Limiter::from_framerate(120.0);
-                                text.sections[0].value = "High".into();
-                            }
-                            FrameLimitOption::High => {
-                                frame_limit
-                                    .update(|settings| settings.frame_limit = FrameLimitOption::Off)
-                                    .unwrap();
-                                frame_pace_settings.limiter = Limiter::Off;
-                                text.sections[0].value = "Infinite".into();
-                            }
-                        };
+                        let new_limit = settings.frame_limit.next();
+                        settings
+                            .update(|settings| settings.frame_limit = new_limit)
+                            .unwrap();
+                        frame_pace_settings.limiter = new_limit.into();
+                        text.sections[0].value = new_limit.label().into();
+                    }
+                    SettingsMenuButton::WindowMode => {
+                        let new_mode = settings.window_mode.next();
+                        settings
+                            .update(|settings| {
+                                settings.window_mode = new_mode;
+                            })
+                            .unwrap();
+                        text.sections[0].value = new_mode.label().into();
+                        window.mode = new_mode.into();
                     }
                 }
             }
@@ -152,8 +135,9 @@ fn settings_menu_button_system(
 #[derive(Component)]
 struct MenuBackground;
 
-#[derive(Serialize, Deserialize)]
-enum FrameLimitOption {
+#[derive(Serialize, Deserialize, Default, Clone, Copy)]
+pub enum FrameLimitOption {
+    #[default]
     Off,
     Cinematic,
     Standard,
@@ -168,11 +152,65 @@ impl FrameLimitOption {
             FrameLimitOption::High => "High",
         }
     }
+
+    pub fn next(&self) -> Self {
+        match self {
+            FrameLimitOption::Off => Self::Cinematic,
+            FrameLimitOption::Cinematic => Self::Standard,
+            FrameLimitOption::Standard => Self::High,
+            FrameLimitOption::High => Self::Off,
+        }
+    }
+}
+impl From<FrameLimitOption> for Limiter {
+    fn from(value: FrameLimitOption) -> Self {
+        match value {
+            FrameLimitOption::Off => Limiter::Off,
+            FrameLimitOption::Cinematic => Limiter::from_framerate(30.0),
+            FrameLimitOption::Standard => Limiter::from_framerate(60.0),
+            FrameLimitOption::High => Limiter::from_framerate(120.0),
+        }
+    }
+}
+#[derive(Serialize, Deserialize, Default, Clone, Copy)]
+pub enum WindowModeOption {
+    #[default]
+    Windowed,
+    BorderlessFullscreen,
+    Fullscreen,
+}
+impl WindowModeOption {
+    pub fn label(&self) -> &'static str {
+        match self {
+            WindowModeOption::Windowed => "Windowed",
+            WindowModeOption::BorderlessFullscreen => "Borderless",
+            WindowModeOption::Fullscreen => "Fullscreen",
+        }
+    }
+    pub fn next(&self)->Self{
+        match self{
+            WindowModeOption::Windowed => WindowModeOption::BorderlessFullscreen,
+            WindowModeOption::BorderlessFullscreen => WindowModeOption::Fullscreen,
+            WindowModeOption::Fullscreen => WindowModeOption::Windowed,
+        }
+    }
+}
+impl From<WindowModeOption> for WindowMode {
+    fn from(value: WindowModeOption) -> Self {
+        match value {
+            WindowModeOption::Windowed => WindowMode::Windowed,
+            WindowModeOption::BorderlessFullscreen => WindowMode::BorderlessFullscreen,
+            WindowModeOption::Fullscreen => WindowMode::Fullscreen,
+        }
+    }
 }
 
-#[derive(Resource, Serialize, Deserialize)]
-struct SettingsResource {
-    frame_limit: FrameLimitOption,
+#[derive(Resource, Serialize, Deserialize, Default)]
+pub struct SettingsResource {
+    #[serde(default)]
+    pub frame_limit: FrameLimitOption,
+    #[serde(default)]
+    pub window_mode: WindowModeOption,
 }
 
 enum BackgroundLayer {
@@ -198,6 +236,7 @@ fn main_menu_button_system(
     mut next_state: ResMut<NextState<crate::AppState>>,
     mut next_menu: ResMut<NextState<MainMenuState>>,
     mut text_query: Query<&mut Text>,
+    mut exit: EventWriter<AppExit>
 ) {
     for (interaction, mut color, mut border_color, children, button) in &mut interaction_query {
         let mut text = text_query.get_mut(children[0]).unwrap();
@@ -208,7 +247,8 @@ fn main_menu_button_system(
                 match button.0 {
                     MainMenuButton::NewGame => next_state.set(crate::AppState::InGame),
                     MainMenuButton::Settings => next_menu.set(MainMenuState::Settings),
-                }
+                    MainMenuButton::Exit => {exit.send(AppExit);},
+                };
             }
             Interaction::Hovered => {
                 *color = Color::RED.into();
@@ -429,6 +469,7 @@ fn enter_main_menu(
                                 "Settings",
                                 MainMenuButtonComponent(MainMenuButton::Settings),
                             );
+                            parent.new_menu_button("Exit",MainMenuButtonComponent(MainMenuButton::Exit));
                         });
                 });
         });
@@ -464,6 +505,22 @@ fn enter_settings(
                             ..default()
                         },
                     ));
+                    parent
+                        .spawn(NodeBundle::default())
+                        .with_children(|window_mode| {
+                            window_mode.spawn(TextBundle::from_section(
+                                "Window Mode: ",
+                                TextStyle {
+                                    color: Color::WHITE,
+                                    font_size: 42.0,
+                                    ..default()
+                                },
+                            ));
+                            window_mode.new_menu_button(
+                                settings.window_mode.label(),
+                                SettingsMenuButtonComponent(SettingsMenuButton::WindowMode),
+                            );
+                        });
                     parent
                         .spawn(NodeBundle::default())
                         .with_children(|frame_rate| {
@@ -502,6 +559,7 @@ struct SettingsMenu;
 enum SettingsMenuButton {
     Apply,
     FrameLimit,
+    WindowMode,
 }
 
 #[derive(Component)]

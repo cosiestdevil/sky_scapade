@@ -6,7 +6,7 @@ use bevy::{
     prelude::*,
     render::{
         render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat},
+        render_resource::{Extent3d, TextureDimension, TextureFormat}, view::window,
     },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
@@ -15,6 +15,7 @@ use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_framepace::{FramepaceSettings, Limiter};
 use bevy_obj::ObjPlugin;
+use bevy_persistent::Persistent;
 use bevy_rapier3d::prelude::*;
 use bevy_tnua::{
     builtins::{TnuaBuiltinDash, TnuaBuiltinJump, TnuaBuiltinWalk},
@@ -53,6 +54,7 @@ fn main() {
                     resolution: (1280., 720.).into(),
                     name: Some("new_game_1.app".into()),
                     present_mode: PresentMode::Mailbox,
+                    visible:false,
                     ..default()
                 }),
                 ..default()
@@ -863,6 +865,7 @@ impl UiHelper for ChildBuilder<'_> {
         let mut result = self.spawn((
             ButtonBundle {
                 style: Style {
+                    display:Display::Grid,
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
@@ -880,7 +883,7 @@ impl UiHelper for ChildBuilder<'_> {
                     font_size: 22.0,
                     ..default()
                 },
-            ));
+            ).with_text_justify(JustifyText::Center).with_style(Style{align_self:AlignSelf::Center,justify_self:JustifySelf::Center,..default()}));
         });
         result
     }
@@ -888,10 +891,15 @@ impl UiHelper for ChildBuilder<'_> {
 
 fn setup(
     mut commands: Commands,
+    settings: Res<Persistent::<menu::SettingsResource>>,
+    mut window: Query<&mut Window>,
     mut frame_pace_settings: ResMut<FramepaceSettings>,
     asset_server: Res<AssetServer>,
 ) {
-    frame_pace_settings.limiter = Limiter::Off;
+    frame_pace_settings.limiter = settings.frame_limit.into();
+    let mut window = window.single_mut();
+    window.mode = settings.window_mode.into();
+    window.visible = true;
     // spawn a camera to be able to see anything
     commands.spawn(Camera3dBundle {
         transform: Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::new(0., 0.0, 0.), Vec3::Y),
