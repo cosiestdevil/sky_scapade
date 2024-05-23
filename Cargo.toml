@@ -32,6 +32,7 @@ bevy-persistent = { version = "0.5", features = ["toml"] }
 serde = { version = "1", features = ["derive"] }
 dirs = "5.0"
 discord-rich-presence = "0.2"
+toml = "0.8"
 
 [profile.release]
 opt-level = 3

@@ -891,16 +891,20 @@ impl UiHelper for ChildBuilder<'_> {
 
 fn setup(
     mut commands: Commands,
+    settings:Res<settings::SettingsResource>,
     mut window: Query<&mut Window>,
     asset_server: Res<AssetServer>,
 ) {
     let mut window = window.single_mut();
     window.visible = true;
     // spawn a camera to be able to see anything
-    commands.spawn(Camera3dBundle {
+    let mut camera = commands.spawn(Camera3dBundle {
         transform: Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::new(0., 0.0, 0.), Vec3::Y),
         ..default()
     });
+    if let settings::AntiAliasOption::Taa = settings.anti_alias {
+        camera.insert(bevy::core_pipeline::experimental::taa::TemporalAntiAliasBundle::default());
+    };
     commands.spawn(AudioBundle {
         source: asset_server.load("Neon Heights.mp3"),
         settings: PlaybackSettings {
@@ -909,36 +913,6 @@ fn setup(
             ..default()
         },
     });
-    // create a simple Perf UI with default settings
-    // and all entries provided by the crate:
-    // commands.spawn((
-    //     PerfUiRoot::default(),
-    //     (
-    //         PerfUiEntryFPS::default(),
-    //         //PerfUiEntryFPSWorst::default(),
-    //         PerfUiEntryFrameTime::default(),
-    //         //PerfUiEntryFrameTimeWorst::default(),
-    //         //PerfUiEntryFrameCount::default(),
-    //         PerfUiEntryEntityCount::default(),
-    //     ),
-    //     // (
-    //     //     PerfUiEntryCpuUsage::default(),
-    //     //     PerfUiEntryMemUsage::default(),
-    //     // ),
-    //     (
-    //         //PerfUiEntryFixedTimeStep::default(),
-    //         //PerfUiEntryFixedOverstep::default(),
-    //         //PerfUiEntryRunningTime::default(),
-    //         PerfUiEntryClock::default(),
-    //     ),
-    //     (
-    //         //PerfUiEntryCursorPosition::default(),
-    //         PerfUiEntryWindowResolution::default(),
-    //         PerfUiEntryWindowScaleFactor::default(),
-    //         PerfUiEntryWindowMode::default(),
-    //         PerfUiEntryWindowPresentMode::default(),
-    //     ),
-    //));
     commands
         .spawn(NodeBundle {
             style: Style {
