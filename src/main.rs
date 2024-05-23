@@ -13,6 +13,10 @@ use bevy::{
 };
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
+#[cfg(feature = "bevy_mod_taa")]
+use bevy_mod_taa::TAABundle;
+#[cfg(not(feature = "bevy_mod_taa"))]
+use bevy::core_pipeline::experimental::taa::TemporalAntiAliasBundle as TAABundle;
 use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
 use bevy_tnua::{
@@ -903,7 +907,7 @@ fn setup(
         ..default()
     });
     if let settings::AntiAliasOption::Taa = settings.anti_alias {
-        camera.insert(bevy::core_pipeline::experimental::taa::TemporalAntiAliasBundle::default());
+        camera.insert(TAABundle::default());
     };
     commands.spawn(AudioBundle {
         source: asset_server.load("Neon Heights.mp3"),

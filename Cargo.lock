@@ -787,6 +787,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_mod_taa"
+version = "0.1.0"
+source = "git+https://github.com/DGriffin91/bevy_mod_taa.git#a9bcf2f6a04501a1de53ed0f64867e1c8ceb66b0"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_obj"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3536,6 +3544,7 @@ dependencies = [
  "bevy_ecs",
  "bevy_embedded_assets",
  "bevy_framepace",
+ "bevy_mod_taa",
  "bevy_obj",
  "bevy_rapier3d",
  "cosiest_noisiest",

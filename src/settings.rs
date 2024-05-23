@@ -2,6 +2,10 @@ use std::{fs, io::Read};
 
 use bevy::{prelude::*, window::WindowMode};
 use bevy_framepace::{FramepaceSettings, Limiter};
+#[cfg(feature = "bevy_mod_taa")]
+use bevy_mod_taa::{TAABundle, TAAPlugin};
+#[cfg(not(feature = "bevy_mod_taa"))]
+use bevy::core_pipeline::experimental::taa::{TemporalAntiAliasPlugin as TAAPlugin,TemporalAntiAliasBundle as TAABundle};
 use bevy_persistent::{Persistent, StorageFormat};
 use serde::{Deserialize, Serialize};
 pub struct SettingsPlugin;
@@ -13,17 +17,16 @@ impl Plugin for SettingsPlugin {
         if let Ok(mut settings_file) = fs::File::open(config_dir.join("settings.toml")) {
             let mut buf: String = Default::default();
             let _ = settings_file.read_to_string(&mut buf);
+            app.add_plugins(TAAPlugin);
             if let Ok(settings) = toml::from_str::<Settings>(buf.as_str()) {
                 match settings.anti_alias {
                     AntiAliasOption::Taa => {
-                        app.add_plugins(
-                            bevy::core_pipeline::experimental::taa::TemporalAntiAliasPlugin,
-                        );
+                        app.insert_resource(Msaa::Off);
                     }
                     msaa if msaa.is_msaa() => {
                         app.insert_resource(msaa.msaa_resource().unwrap());
                     }
-                    _=>{}
+                    _ => {}
                 }
             }
         }
@@ -52,11 +55,9 @@ pub struct Settings {
     pub anti_alias: AntiAliasOption,
 }
 
-
-pub trait SettingsCycleOption{
+pub trait SettingsCycleOption {
     fn next(&self) -> Self;
 }
-
 
 #[derive(Serialize, Deserialize, Default, Clone, Copy)]
 pub enum FrameLimitOption {
@@ -76,8 +77,7 @@ impl FrameLimitOption {
         }
     }
 }
-impl SettingsCycleOption for FrameLimitOption{
-    
+impl SettingsCycleOption for FrameLimitOption {
     fn next(&self) -> Self {
         match self {
             FrameLimitOption::Off => Self::Cinematic,
@@ -113,7 +113,7 @@ impl WindowModeOption {
         }
     }
 }
-impl SettingsCycleOption for WindowModeOption{
+impl SettingsCycleOption for WindowModeOption {
     fn next(&self) -> Self {
         match self {
             WindowModeOption::Windowed => WindowModeOption::BorderlessFullscreen,
@@ -143,8 +143,8 @@ pub enum AntiAliasOption {
 }
 
 impl AntiAliasOption {
-    pub fn label(&self)-> &'static str{
-        match self{
+    pub fn label(&self) -> &'static str {
+        match self {
             AntiAliasOption::Off => "Off",
             AntiAliasOption::Msaa2 => "MSAA (x2)",
             AntiAliasOption::Msaa4 => "MSAA (X4)",
@@ -163,21 +163,24 @@ impl AntiAliasOption {
         }
     }
     pub fn is_msaa(&self) -> bool {
-        matches!(self, AntiAliasOption::Off
-            | AntiAliasOption::Msaa2
-            | AntiAliasOption::Msaa4
-            | AntiAliasOption::Msaa8)
+        matches!(
+            self,
+            AntiAliasOption::Off
+                | AntiAliasOption::Msaa2
+                | AntiAliasOption::Msaa4
+                | AntiAliasOption::Msaa8
+        )
     }
 }
 
-impl SettingsCycleOption for AntiAliasOption{
+impl SettingsCycleOption for AntiAliasOption {
     fn next(&self) -> Self {
-        match self{
+        match self {
             AntiAliasOption::Off => AntiAliasOption::Msaa2,
             AntiAliasOption::Msaa2 => AntiAliasOption::Msaa4,
             AntiAliasOption::Msaa4 => AntiAliasOption::Msaa8,
             AntiAliasOption::Msaa8 => AntiAliasOption::Taa,
-            AntiAliasOption::Taa =>  AntiAliasOption::Off,
+            AntiAliasOption::Taa => AntiAliasOption::Off,
         }
     }
 }
@@ -186,11 +189,24 @@ fn settings_changed(
     mut windows: Query<&mut Window>,
     mut frame_pace_settings: ResMut<FramepaceSettings>,
     settings: Res<crate::settings::SettingsResource>,
+    mut msaa: ResMut<Msaa>,
+    camera: Query<Entity, With<Camera>>,
+    mut commands: Commands,
 ) {
     if settings.is_changed() {
         frame_pace_settings.limiter = settings.frame_limit.into();
         for mut window in &mut windows {
             window.mode = settings.window_mode.into();
+        }
+        for camera_entity in camera.into_iter() {
+            let mut camera = commands.entity(camera_entity);
+            if let Some(new_msaa) = settings.anti_alias.msaa_resource() {
+                *msaa = new_msaa;
+                camera.remove::<TAABundle>();
+            } else {
+                *msaa = Msaa::Off;
+                camera.insert(TAABundle::default());
+            }
         }
     }
 }
