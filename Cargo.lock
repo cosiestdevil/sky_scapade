@@ -1555,6 +1555,8 @@ dependencies = [
 [[package]]
 name = "cosiest_noisiest"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "105f5199cb37cd48b10e2915de227c3ddd7159c76fe85fb10a63e25f85f540e8"
 dependencies = [
  "cfg-if",
  "num-integer",

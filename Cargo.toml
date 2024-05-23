@@ -25,7 +25,7 @@ leafwing-input-manager = "0.13"
 bevy-tnua-rapier3d = "0.6"
 bevy-tnua = "0.18"
 bevy_embedded_assets = "0.10"
-cosiest_noisiest ={path = "../cosiest_noisiest"}
+cosiest_noisiest = "0.1.0"
 base64 = "0.22"
 strum ={version = "0.26",features = ["derive"]}
 bevy-persistent = { version = "0.5", features = ["toml"] }

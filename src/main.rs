@@ -364,11 +364,12 @@ fn generate_more_if_needed(
     let (level_entity, mut level) = level.single_mut();
     let cube_size = 1.0f32;
     let player_transform = player.single();
-    if (player_transform.translation.x / (cube_size * 2.)) >= level.right - 10. {
+    if (player_transform.translation.x / (cube_size * 2.)) >= level.right - 100. {
         let mut hole_streak = 0;
-        for x in 0..256 {
+        let heights = generator.get_heights(level.right as usize);
+        for (x,y) in heights.into_iter().enumerate() {
             let x = x + (level.right as usize);
-            let hy = (generator.get_height(x) as f32) * cube_size;
+            let hy = (y as f32) * cube_size;
             let platform_assets = platform_assets.clone();
             if hole_streak > 4 {
                 hole_streak = 0;
@@ -392,7 +393,7 @@ fn generate_more_if_needed(
                 )))
                 .set_parent(level_entity);
         }
-        level.right += 255.;
+        level.right += heights.len() as f32;
     }
 }
 fn dash_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
@@ -697,11 +698,12 @@ fn start_level(
             });
         });
     }
+    let heights = generator.get_heights(0);
     commands.insert_resource(generator.clone());
     let level = commands
         .spawn((
             Level {
-                right: 255.,
+                right: heights.len() as f32,
                 upgrade_timer: Timer::new(Duration::from_secs(10), TimerMode::Repeating),
                 timer: Timer::new(Duration::from_secs(300), TimerMode::Once),
             },
@@ -710,7 +712,7 @@ fn start_level(
         ))
         .id();
     let cube_size = 1.0f32;
-    let hy = (generator.get_height(0) as f32) * cube_size;
+    
     commands
         .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
         .insert(PbrBundle {
@@ -720,7 +722,7 @@ fn start_level(
         })
         .insert(LevelFloor)
         .insert(TransformBundle::from_transform(Transform::from_xyz(
-            0., hy, 0.,
+            0., (heights[0] as f32)*cube_size, 0.,
         )))
         .set_parent(level);
     let input_map = InputMap::new([
@@ -767,7 +769,7 @@ fn start_level(
         .insert(LockedAxes::ROTATION_LOCKED | LockedAxes::TRANSLATION_LOCKED_Z)
         .insert(TransformBundle::from(Transform::from_xyz(
             1.5 * cube_size,
-            hy + (3.5 * cube_size),
+            (heights[0] as f32) + (3.5 * cube_size),
             0.,
         )))
         .set_parent(level)
@@ -790,8 +792,8 @@ fn start_level(
         *camera_transform = Transform::from_xyz(0.0, cube_size * 5., cube_size * 20.)
             .looking_at(Vec3::new(0., 0., 0.), Vec3::Y)
     }
-    for x in 1..6 {
-        let hy = (generator.get_height(x) as f32) * cube_size;
+    for (x,hy) in heights.into_iter().enumerate().skip(1).take(5) {
+        let hy = (hy as f32) * cube_size;
         commands
             .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
             .insert(PbrBundle {
@@ -808,8 +810,8 @@ fn start_level(
             .set_parent(level);
     }
     let mut hole_streak = 0;
-    for x in 6..256 {
-        let hy = (generator.get_height(x) as f32) * cube_size;
+    for (x,hy) in heights.into_iter().enumerate().skip(6) {
+        let hy = (hy as f32) * cube_size;
         if hole_streak > 4 {
             hole_streak = 0;
         } else if generator.is_hole(x) {

@@ -167,6 +167,11 @@ impl Generator {
     pub fn get_height(&mut self, x: usize) -> f64 {
         self.height_generator.sample(x)
     }
+    pub fn get_heights(&mut self,start:usize)->[f64;1024]{
+        let mut result = [0.0f64;1024];
+        self.height_generator.fill(start, &mut result);
+        result
+    }
 
     pub fn get_upgrade(&mut self) -> Option<UpgradeType> {
         self.upgrades.get_upgrade()
