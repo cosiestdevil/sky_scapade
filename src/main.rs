@@ -1,12 +1,18 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use base64::prelude::*;
+#[cfg(not(feature = "bevy_mod_taa"))]
+use bevy::core_pipeline::experimental::taa::TemporalAntiAliasBundle as TAABundle;
 use bevy::{
+    asset::LoadState,
     audio::Volume,
+    core_pipeline::Skybox,
     log,
     prelude::*,
     render::{
         render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat},
+        render_resource::{
+            Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
+        },
     },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
@@ -15,8 +21,6 @@ use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 #[cfg(feature = "bevy_mod_taa")]
 use bevy_mod_taa::TAABundle;
-#[cfg(not(feature = "bevy_mod_taa"))]
-use bevy::core_pipeline::experimental::taa::TemporalAntiAliasBundle as TAABundle;
 use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
 use bevy_tnua::{
@@ -34,13 +38,13 @@ use leafwing_input_manager::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strum::EnumIter;
+mod discord;
 mod generate;
 mod input;
 mod menu;
+mod settings;
 mod system_info;
 mod upgrades;
-mod settings;
-mod discord;
 const GAME_NAME: &str = "SkyScapade";
 fn main() {
     let mut app = App::new();
@@ -57,7 +61,7 @@ fn main() {
                     resolution: (1280., 720.).into(),
                     name: Some("new_game_1.app".into()),
                     present_mode: PresentMode::Mailbox,
-                    visible:false,
+                    visible: false,
                     ..default()
                 }),
                 ..default()
@@ -93,7 +97,7 @@ fn main() {
     .add_plugins(bevy_framepace::FramepacePlugin)
     .add_plugins(PerfUiPlugin)
     .add_systems(Startup, setup)
-    .add_systems(Update, temp);
+    .add_systems(Update, (temp,skybox_loaded));
     app.insert_state(InGameState::Playing);
     app.add_plugins(InputManagerPlugin::<input::Action>::default());
     app.add_plugins((
@@ -155,7 +159,7 @@ fn move_camera_based_on_speed(
         return;
     };
     let player_velocity = velocities.single();
-    persp.fov = (std::f32::consts::PI/4.0)*player_velocity.linvel.x.abs().powf(0.125).max(1.);
+    persp.fov = (std::f32::consts::PI / 4.0) * player_velocity.linvel.x.abs().powf(0.125).max(1.);
 }
 fn level_finish(
     mut level: Query<&mut Level>,
@@ -367,7 +371,7 @@ fn generate_more_if_needed(
     if (player_transform.translation.x / (cube_size * 2.)) >= level.right - 100. {
         let mut hole_streak = 0;
         let heights = generator.get_heights(level.right as usize);
-        for (x,y) in heights.into_iter().enumerate() {
+        for (x, y) in heights.into_iter().enumerate() {
             let x = x + (level.right as usize);
             let hy = (y as f32) * cube_size;
             let platform_assets = platform_assets.clone();
@@ -450,7 +454,7 @@ fn move_player(
             displacement: direction.normalize_or_zero() * player.max_speed() * 0.75,
             speed: player.max_speed() * 3.,
             allow_in_air: player.dash_skill.air,
-            brake_to_speed:player.max_speed(),
+            brake_to_speed: player.max_speed(),
             ..default()
         });
     }
@@ -594,7 +598,9 @@ fn start_level(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs().try_into().unwrap(),
+            .as_secs()
+            .try_into()
+            .unwrap(),
     );
     let platform_assets = PlatformAssets {
         mesh: platform_mesh.clone(),
@@ -712,7 +718,7 @@ fn start_level(
         ))
         .id();
     let cube_size = 1.0f32;
-    
+
     commands
         .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
         .insert(PbrBundle {
@@ -722,7 +728,9 @@ fn start_level(
         })
         .insert(LevelFloor)
         .insert(TransformBundle::from_transform(Transform::from_xyz(
-            0., (heights[0] as f32)*cube_size, 0.,
+            0.,
+            (heights[0] as f32) * cube_size,
+            0.,
         )))
         .set_parent(level);
     let input_map = InputMap::new([
@@ -792,7 +800,7 @@ fn start_level(
         *camera_transform = Transform::from_xyz(0.0, cube_size * 5., cube_size * 20.)
             .looking_at(Vec3::new(0., 0., 0.), Vec3::Y)
     }
-    for (x,hy) in heights.into_iter().enumerate().skip(1).take(5) {
+    for (x, hy) in heights.into_iter().enumerate().skip(1).take(5) {
         let hy = (hy as f32) * cube_size;
         commands
             .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
@@ -810,7 +818,7 @@ fn start_level(
             .set_parent(level);
     }
     let mut hole_streak = 0;
-    for (x,hy) in heights.into_iter().enumerate().skip(6) {
+    for (x, hy) in heights.into_iter().enumerate().skip(6) {
         let hy = (hy as f32) * cube_size;
         if hole_streak > 4 {
             hole_streak = 0;
@@ -871,7 +879,7 @@ impl UiHelper for ChildBuilder<'_> {
         let mut result = self.spawn((
             ButtonBundle {
                 style: Style {
-                    display:Display::Grid,
+                    display: Display::Grid,
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
@@ -882,35 +890,80 @@ impl UiHelper for ChildBuilder<'_> {
             component,
         ));
         result.with_children(|button| {
-            button.spawn(TextBundle::from_section(
-                label,
-                TextStyle {
-                    color: Color::RED,
-                    font_size: 22.0,
+            button.spawn(
+                TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        color: Color::RED,
+                        font_size: 22.0,
+                        ..default()
+                    },
+                )
+                .with_text_justify(JustifyText::Center)
+                .with_style(Style {
+                    align_self: AlignSelf::Center,
+                    justify_self: JustifySelf::Center,
                     ..default()
-                },
-            ).with_text_justify(JustifyText::Center).with_style(Style{align_self:AlignSelf::Center,justify_self:JustifySelf::Center,..default()}));
+                }),
+            );
         });
         result
     }
 }
 
+#[derive(Resource, Deref)]
+pub struct SkyboxHandle(Handle<Image>);
+
+fn skybox_loaded(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
+    skybox_handle: Res<SkyboxHandle>,
+    camera: Query<Entity, (With<Camera>, Without<Skybox>)>,
+) {
+    for camera_entity in camera.iter() {
+        let mut camera = commands.entity(camera_entity);
+        if asset_server.load_state(&skybox_handle.0) == LoadState::Loaded {
+            let image = images.get_mut(&skybox_handle.0).unwrap();
+            if image.texture_descriptor.array_layer_count() == 1 {
+                image.reinterpret_stacked_2d_as_array(image.height() / image.width());
+                image.texture_view_descriptor = Some(TextureViewDescriptor {
+                    dimension: Some(TextureViewDimension::Cube),
+                    ..default()
+                });
+            }
+            camera.insert(Skybox {
+                image: skybox_handle.clone(),
+                brightness: 1000.0,
+            });
+        }
+    }
+}
+
 fn setup(
     mut commands: Commands,
-    settings:Res<settings::SettingsResource>,
+    settings: Res<settings::SettingsResource>,
     mut window: Query<&mut Window>,
     asset_server: Res<AssetServer>,
 ) {
     let mut window = window.single_mut();
     window.visible = true;
+    let skybox_handle = asset_server.load("skybox/cube.png");
+    commands.insert_resource(SkyboxHandle(skybox_handle));
     // spawn a camera to be able to see anything
-    let mut camera = commands.spawn(Camera3dBundle {
+    let mut camera = commands.spawn((Camera3dBundle {
         transform: Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::new(0., 0.0, 0.), Vec3::Y),
+
         ..default()
-    });
+    },));
+
     if let settings::AntiAliasOption::Taa = settings.anti_alias {
         camera.insert(TAABundle::default());
     };
+    commands.insert_resource(AmbientLight {
+        color: Color::rgb_u8(210, 220, 240),
+        brightness: 1.0,
+    });
     commands.spawn(AudioBundle {
         source: asset_server.load("Neon Heights.mp3"),
         settings: PlaybackSettings {
@@ -987,5 +1040,3 @@ pub enum InGameState {
     End,
     None,
 }
-
-
