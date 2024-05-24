@@ -781,19 +781,18 @@ fn start_level(
             0.,
         )))
         .set_parent(level)
-        .with_children(|player| {
-            player.spawn(PointLightBundle {
-                point_light: PointLight {
-                    shadows_enabled: true,
-                    intensity: 100_000_000.,
-                    range: 1000.0,
-                    ..default()
-                },
-                transform: Transform::from_xyz(10.0, 60.0, 10.0),
-                ..default()
-            });
-        })
         .id();
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            shadows_enabled: true,
+            illuminance:light_consts::lux::AMBIENT_DAYLIGHT,
+            color:Color::rgb_u8(234, 212, 165),
+            ..default()
+        },
+        transform: Transform::from_xyz(10.0, 60.0, -10.0).looking_at(Vec3::splat(0.0), Vec3::Y),
+        ..default()
+    });
+
     if let Ok((camera, mut camera_transform)) = camera.get_single_mut() {
         // =
         commands.entity(camera).set_parent(player);
@@ -961,8 +960,8 @@ fn setup(
         camera.insert(TAABundle::default());
     };
     commands.insert_resource(AmbientLight {
-        color: Color::rgb_u8(210, 220, 240),
-        brightness: 1.0,
+        color:Color::rgb_u8(234, 212, 165),
+        brightness: light_consts::lux::CLEAR_SUNRISE,
     });
     commands.spawn(AudioBundle {
         source: asset_server.load("Neon Heights.mp3"),
