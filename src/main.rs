@@ -159,8 +159,18 @@ fn move_camera_based_on_speed(
         return;
     };
     let player_velocity = velocities.single();
-    persp.fov = (std::f32::consts::PI / 4.0) * player_velocity.linvel.x.abs().powf(0.125).max(1.);
+    let min_fov = 45.;
+    let max_fov = 120.;
+    let fov_modifier = (player_velocity.linvel.x.abs().powf(0.125) / 8.).clamp(0., 1.);
+
+    persp.fov = interpolate(min_fov, max_fov, fov_modifier).to_radians();
 }
+fn interpolate(pa: f32, pb: f32, px: f32) -> f32 {
+    let ft = px * std::f32::consts::PI;
+    let f = (1. - ft.cos()) * 0.5;
+    pa * (1. - f) + pb * f
+}
+
 fn level_finish(
     mut level: Query<&mut Level>,
     time: Res<Time>,
