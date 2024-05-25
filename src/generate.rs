@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use bevy_ecs::system::Resource;
-use cosiest_noisiest::NoiseGenerator;
+use cosiest_noisiest::{Frequency, NoiseGenerator};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use strum::IntoEnumIterator;
@@ -17,12 +17,12 @@ pub struct Generator {
 }
 
 pub struct NoiseSettings {
-    wave_length: f64,
+    wave_length: usize,
     amplitude: f64,
     octaves: usize,
 }
 impl NoiseSettings {
-    pub fn new(wave_length: impl Into<f64>, amplitude: impl Into<f64>, octaves: usize) -> Self {
+    pub fn new(wave_length: impl Into<usize>, amplitude: impl Into<f64>, octaves: usize) -> Self {
         Self {
             wave_length: wave_length.into(),
             amplitude: amplitude.into(),
@@ -77,13 +77,13 @@ impl Generator {
             seed: rng.get_seed(),
             height_generator: NoiseGenerator::from_rng(
                 height_rng,
-                1. / height_noise_settings.wave_length,
+                Frequency::from_wave_length(height_noise_settings.wave_length ),
                 height_noise_settings.amplitude,
                 height_noise_settings.octaves,
             ),
             hole_generator: NoiseGenerator::from_rng(
                 hole_rng,
-                1. / hole_noise_settings.wave_length,
+                Frequency::from_wave_length(hole_noise_settings.wave_length ),
                 hole_noise_settings.amplitude,
                 hole_noise_settings.octaves,
             ),

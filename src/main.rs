@@ -97,7 +97,7 @@ fn main() {
     .add_plugins(bevy_framepace::FramepacePlugin)
     .add_plugins(PerfUiPlugin)
     .add_systems(Startup, setup)
-    .add_systems(Update, (temp,skybox_loaded));
+    .add_systems(Update, (temp, skybox_loaded));
     app.insert_state(InGameState::Playing);
     app.add_plugins(InputManagerPlugin::<input::Action>::default());
     app.add_plugins((
@@ -378,12 +378,12 @@ fn generate_more_if_needed(
     let (level_entity, mut level) = level.single_mut();
     let cube_size = 1.0f32;
     let player_transform = player.single();
-    if (player_transform.translation.x / (cube_size * 2.)) >= level.right - 100. {
+    if (player_transform.translation.x / cube_size) >= (level.right * 2) as f32 - 100. {
         let mut hole_streak = 0;
-        let heights = generator.get_heights(level.right as usize);
+        let generate_offset = level.right;
+        let heights = generator.get_heights(generate_offset);
         for (x, y) in heights.into_iter().enumerate() {
-            let x = x + (level.right as usize);
-            let hy = (y as f32) * cube_size;
+            let x = x + generate_offset;
             let platform_assets = platform_assets.clone();
             if hole_streak > 4 {
                 hole_streak = 0;
@@ -391,7 +391,8 @@ fn generate_more_if_needed(
                 hole_streak += 1;
                 continue;
             }
-
+            let x: f32 = x as f32 * cube_size * 2.;
+            let y = (y as f32) * cube_size;
             commands
                 .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
                 .insert(PbrBundle {
@@ -401,13 +402,12 @@ fn generate_more_if_needed(
                 })
                 .insert(LevelFloor)
                 .insert(TransformBundle::from_transform(Transform::from_xyz(
-                    (x as f32) * cube_size * 2.,
-                    hy,
-                    0.,
+                    x, y, 0.,
                 )))
                 .set_parent(level_entity);
         }
-        level.right += heights.len() as f32;
+        level.right += heights.len();
+        info!("level.right: {}", level.right);
     }
 }
 fn dash_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
@@ -482,7 +482,7 @@ fn move_player(
 
 #[derive(Component)]
 struct Level {
-    right: f32,
+    right: usize,
     upgrade_timer: Timer,
     timer: Timer,
 }
@@ -590,8 +590,8 @@ fn start_level(
 ) {
     next_state.set(InGameState::Playing);
     let mut generator = generate::Generator::from_entropy(
-        NoiseSettings::new(256, 64, 5),
-        NoiseSettings::new(7, 64, 7),
+        NoiseSettings::new(256_usize, 64, 5),
+        NoiseSettings::new(9_usize, 64, 3),
     );
     let (asset_server, mut images, mut materials, mut meshes) = assets;
     let platform_mesh: Handle<Mesh> = asset_server.load("platform.obj");
@@ -719,7 +719,7 @@ fn start_level(
     let level = commands
         .spawn((
             Level {
-                right: heights.len() as f32,
+                right: heights.len(),
                 upgrade_timer: Timer::new(Duration::from_secs(10), TimerMode::Repeating),
                 timer: Timer::new(Duration::from_secs(300), TimerMode::Once),
             },
@@ -727,6 +727,7 @@ fn start_level(
             VisibilityBundle::default(),
         ))
         .id();
+    info!("level.right: {}", heights.len());
     let cube_size = 1.0f32;
 
     commands
@@ -795,8 +796,8 @@ fn start_level(
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
             shadows_enabled: true,
-            illuminance:light_consts::lux::AMBIENT_DAYLIGHT,
-            color:Color::rgb_u8(234, 212, 165),
+            illuminance: light_consts::lux::AMBIENT_DAYLIGHT,
+            color: Color::rgb_u8(234, 212, 165),
             ..default()
         },
         transform: Transform::from_xyz(10.0, 60.0, -10.0).looking_at(Vec3::splat(0.0), Vec3::Y),
@@ -828,13 +829,14 @@ fn start_level(
     }
     let mut hole_streak = 0;
     for (x, hy) in heights.into_iter().enumerate().skip(6) {
-        let hy = (hy as f32) * cube_size;
         if hole_streak > 4 {
             hole_streak = 0;
         } else if generator.is_hole(x) {
             hole_streak += 1;
             continue;
         }
+        let x = (x as f32) * cube_size * 2.;
+        let y = (hy as f32) * cube_size;
         commands
             .spawn(Collider::cuboid(cube_size, cube_size, cube_size))
             .insert(PbrBundle {
@@ -844,9 +846,7 @@ fn start_level(
             })
             .insert(LevelFloor)
             .insert(TransformBundle::from_transform(Transform::from_xyz(
-                (x as f32) * cube_size * 2.,
-                hy,
-                0.,
+                x, y, 0.,
             )))
             .set_parent(level);
     }
@@ -970,7 +970,7 @@ fn setup(
         camera.insert(TAABundle::default());
     };
     commands.insert_resource(AmbientLight {
-        color:Color::rgb_u8(234, 212, 165),
+        color: Color::rgb_u8(234, 212, 165),
         brightness: light_consts::lux::CLEAR_SUNRISE,
     });
     commands.spawn(AudioBundle {
