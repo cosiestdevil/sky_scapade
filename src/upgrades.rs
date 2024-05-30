@@ -60,6 +60,7 @@ pub enum UpgradeType {
     JumpSkill(JumpSkill),
     DashSkill(DashSkill),
     GlideSkill(GlideSkill),
+    RevivalSkill(RevivalSkill)
 }
 
 
@@ -116,7 +117,11 @@ pub struct GlideSkill {
     pub tier: UpgradeLevel,
     pub max_duration: Duration,
 }
-
+#[derive(Debug, Copy, Clone, Default)]
+pub struct RevivalSkill {
+    pub uses:u8,
+    pub tier:UpgradeLevel,
+}
 #[derive(Debug, Copy, Clone)]
 pub struct StatUpgrade {
     pub modifier: f32,
@@ -147,6 +152,10 @@ impl Upgrade<UpgradeType> for UpgradeType {
                 UpgradeType::GlideSkill(other) => me.tier <= other.tier,
                 _ => false,
             },
+            UpgradeType::RevivalSkill(me) =>match other{
+                UpgradeType::RevivalSkill(other)=>me.tier <=other.tier,
+                _=>false,
+            },
         }
     }
     
@@ -161,6 +170,7 @@ impl Upgrade<UpgradeType> for UpgradeType {
             UpgradeType::JumpSkill(jump) => jump.tier,
             UpgradeType::DashSkill(dash) => dash.tier,
             UpgradeType::GlideSkill(glide) => glide.tier,
+            UpgradeType::RevivalSkill(revival) => revival.tier,
         }
     }
     

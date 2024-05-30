@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
-use crate::{DashSkill, JumpSkill, StatUpgrade,GlideSkill};
+use crate::{DashSkill, JumpSkill, StatUpgrade,GlideSkill,RevivalSkill};
 
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum Action {
@@ -27,7 +27,9 @@ pub struct Player{
     pub glide_skill:GlideSkill,
     pub used_glides:u8,
     pub glide_cooldown:Option<Timer>,
-    pub glide_timer:Option<Timer>
+    pub glide_timer:Option<Timer>,
+    pub revival_skill:RevivalSkill,
+    pub used_revivals:u8
     }
 impl Player{
     pub fn max_speed(&mut self)->f32{

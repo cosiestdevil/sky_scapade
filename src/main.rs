@@ -8,10 +8,11 @@ use bevy::{
     log,
     prelude::*,
     render::{
+        camera,
         render_asset::RenderAssetUsages,
         render_resource::{
             Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
-        }
+        },
     },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
@@ -21,7 +22,7 @@ use bevy_embedded_assets::EmbeddedAssetPlugin;
 #[cfg(feature = "bevy_mod_taa")]
 use bevy_mod_taa::TAABundle;
 use bevy_obj::ObjPlugin;
-use bevy_rapier3d::prelude::*;
+use bevy_rapier3d::{na::Translation, parry::math::Vector, prelude::*};
 use bevy_tnua::{
     builtins::{TnuaBuiltinJump, TnuaBuiltinWalk},
     control_helpers::TnuaSimpleAirActionsCounter,
@@ -137,6 +138,11 @@ fn main() {
     app.add_systems(OnExit(InGameState::Upgrade), resume_level);
     app.add_systems(OnEnter(InGameState::End), pause_level);
     app.add_systems(OnExit(InGameState::End), (resume_level, leave_end_screen));
+    app.add_systems(OnEnter(InGameState::Revival), revival_start);
+    app.add_systems(
+        FixedUpdate,
+        (update_revival).run_if(in_state(InGameState::Revival)),
+    );
     app.run();
 }
 
@@ -299,6 +305,10 @@ fn level_upgrade(
                     player.glide_skill = skill;
                     display = format!("{} ({:?})", "Glide Upgrade", skill.tier);
                 }
+                UpgradeType::RevivalSkill(skill) => {
+                    player.revival_skill = skill;
+                    display = format!("{} ({:?})", "Revival", skill.tier);
+                }
             }
             commands.spawn(AudioBundle {
                 source: asset_server.load("upgrade.mp3"),
@@ -308,7 +318,7 @@ fn level_upgrade(
                     ..default()
                 },
             });
-            
+
             let safe_ui = safe_ui.get_single();
             if let Ok(safe_ui) = safe_ui {
                 let mut safe_ui = commands.entity(safe_ui);
@@ -336,10 +346,10 @@ fn level_upgrade(
                                     max_width: Val::Percent(100.),
                                     height: Val::Percent(100.),
                                     border: UiRect::all(Val::Px(5.)),
-                                    padding:UiRect::all(Val::Px(5.)),
+                                    padding: UiRect::all(Val::Px(5.)),
                                     ..default()
                                 },
-                                border_color:upgrade.color().into(),
+                                border_color: upgrade.color().into(),
                                 background_color: Color::rgba(0., 0., 0., 0.6).into(),
                                 ..default()
                             })
@@ -594,7 +604,7 @@ fn cleanup_level(mut commands: Commands, level: Query<Entity, With<Level>>) {
 
 fn killing_floor(
     mut commands: Commands,
-    player: Query<(Entity, &Transform, &Player)>,
+    mut player: Query<(Entity, &Transform, &mut Player)>,
     mut next_state: ResMut<NextState<InGameState>>,
     mut generator: ResMut<generate::Generator>,
     //safe_ui: Query<Entity, With<crate::SafeUi>>,
@@ -618,7 +628,6 @@ fn killing_floor(
                         justify_items: JustifyItems::Center,
                         ..default()
                     },
-                    background_color: Color::rgba(0., 0., 0., 0.6).into(),
                     ..default()
                 },
                 EndScreen,
@@ -635,8 +644,6 @@ fn killing_floor(
                     .with_text_justify(JustifyText::Center),
                 );
             });
-        //});
-        //}
         next_state.set(InGameState::End);
     }
 }
@@ -1158,6 +1165,7 @@ fn temp(
                 next_app.set(AppState::MainMenu);
             }
             InGameState::None => {}
+            InGameState::Revival => {}
         }
     }
 }
@@ -1168,5 +1176,66 @@ pub enum InGameState {
     Paused,
     Upgrade,
     End,
+    Revival,
     None,
+}
+
+#[derive(Component)]
+struct RevivalComponent {
+    starting: Vec3,
+    ending: Vec3,
+    steps: u32,
+    step: u32,
+}
+fn revival_start(
+    mut commands: Commands,
+    mut player: Query<(Entity, &mut RigidBody, &Transform), With<Player>>,
+    mut camera: Query<(Entity, &mut Projection), With<Camera>>,
+    mut generator: ResMut<generate::Generator>,
+) {
+    let (player_entity, player_body, transform) = player.single_mut();
+    let revival_body = commands
+        .spawn((
+            RigidBody::KinematicPositionBased,
+            RevivalComponent {
+                starting: transform.translation,
+                ending: Vec3::new(
+                    transform.translation.x,
+                    (generator.get_height((transform.translation.x / 2.) as usize) + 20.) as f32,
+                    -5.0,
+                ),
+                steps: 320,
+                step: 0,
+            },
+            TransformBundle::from_transform(transform.with_translation(Vec3::Y)),
+            Collider::ball(0.5),
+            LockedAxes::ROTATION_LOCKED,
+        ))
+        .id();
+    let joint = FixedJointBuilder::new()
+        .local_anchor1(Vec3::new(0.0, -1.0, 0.0))
+        .local_anchor2(Vec3::new(0.0, 2.0, 0.0));
+    let mut player = commands.entity(player_entity);
+    player.insert(LockedAxes::empty());
+    player.insert(ImpulseJoint::new(revival_body, joint));
+    let (camera, persp) = camera.single_mut();
+    let mut camera = commands.entity(camera);
+    camera.set_parent(revival_body);
+    if let Projection::Perspective(persp) = persp.into_inner() {
+        persp.fov = 120.0_f32.to_radians();
+    }
+}
+
+fn update_revival(mut controllers: Query<(&mut Transform, &mut RevivalComponent)>) {
+    for (mut controller, mut revival) in controllers.iter_mut() {
+        if revival.steps > revival.step {
+            revival.step += 1;
+            let translation = revival.starting.lerp(
+                revival.ending,
+                (revival.step as f32) / (revival.steps as f32),
+            );
+            controller.translation = translation;
+        } else {
+        }
+    }
 }
