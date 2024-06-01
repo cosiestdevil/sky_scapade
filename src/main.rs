@@ -36,8 +36,11 @@ use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
     action_state::ActionState, input_map::InputMap, plugin::InputManagerPlugin, InputManagerBundle,
 };
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use strum::EnumIter;
+use std::{
+    default,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use strum::{EnumCount, EnumIter};
 mod discord;
 mod generate;
 mod input;
@@ -119,9 +122,12 @@ fn main() {
             level_finish,
             killing_floor,
             update_score,
+            update_player_position_display,
             dash_cooldown,
+            glide_cooldown,
             jump_skill_display,
             dash_skill_display,
+            slow_fall_skill_display,
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
@@ -246,6 +252,10 @@ fn level_upgrade(
                     player.dash_skill = skill;
                     display = format!("{} ({:?})", "Dash Upgrade", skill.tier);
                 }
+                UpgradeType::GlideSkill(skill) => {
+                    player.glide_skill = skill;
+                    display = format!("{} ({:?})", "Glide Upgrade", skill.tier);
+                }
             }
             // let safe_ui = safe_ui.get_single();
             // if let Ok(safe_ui) = safe_ui {
@@ -292,9 +302,11 @@ enum UpgradeType {
     JumpPower(StatUpgrade),
     JumpSkill(JumpSkill),
     DashSkill(DashSkill),
+    GlideSkill(GlideSkill),
 }
-#[derive(EnumIter, Debug, PartialEq, Copy, Clone, PartialOrd)]
+#[derive(EnumIter, EnumCount, Debug, PartialEq, Copy, Clone, PartialOrd, Default)]
 enum UpgradeLevel {
+    #[default]
     None,
     Basic,
     Improved,
@@ -307,19 +319,28 @@ enum UpgradeLevel {
     Legendary,
     Mythic,
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 struct JumpSkill {
     max_jumps: u8,
     tier: UpgradeLevel,
     air: bool,
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 struct DashSkill {
     max_dash: u8,
     air: bool,
     cooldown: Duration,
     tier: UpgradeLevel,
 }
+
+#[derive(Debug, Copy, Clone, Default)]
+struct GlideSkill {
+    max_uses: u8,
+    cooldown: Duration,
+    tier: UpgradeLevel,
+    max_duration: Duration,
+}
+
 #[derive(Debug, Copy, Clone)]
 struct StatUpgrade {
     modifier: f32,
@@ -346,6 +367,10 @@ impl upgrades::Upgrade<UpgradeType> for UpgradeType {
                 UpgradeType::DashSkill(other) => me.tier <= other.tier,
                 _ => false,
             },
+            UpgradeType::GlideSkill(me) => match other {
+                UpgradeType::GlideSkill(other) => me.tier <= other.tier,
+                _ => false,
+            },
         }
     }
 }
@@ -365,6 +390,26 @@ fn update_score(
     }
     if let Ok(mut score_text) = score.get_single_mut() {
         score_text.sections[0].value = format!("Score: {:.0}", player.score);
+    }
+}
+
+#[derive(Component)]
+struct PositionDisplay;
+fn update_player_position_display(
+    mut player: Query<(&Transform, &Velocity), With<Player>>,
+    mut score: Query<&mut Text, With<PositionDisplay>>,
+) {
+    let (player_transform, velocity) = player.single_mut();
+    if let Ok(mut score_text) = score.get_single_mut() {
+        score_text.sections[0].value = format!(
+            "Position: [{:.1},{:.1},{:.1}]\r\nVelocity: [{:.1},{:.1},{:.1}]",
+            player_transform.translation.x,
+            player_transform.translation.y,
+            player_transform.translation.z,
+            velocity.linvel.x,
+            velocity.linvel.y,
+            velocity.linvel.z
+        );
     }
 }
 
@@ -425,15 +470,33 @@ fn dash_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
         }
     }
 }
+fn glide_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
+    let mut player = player.single_mut();
+    if let Some(ref mut cooldown) = player.glide_cooldown {
+        cooldown.tick(time.delta());
+        if cooldown.just_finished() {
+            player.used_glides -= 1;
+            if player.used_glides == 0 {
+                player.glide_cooldown = None;
+            } else {
+                player.glide_cooldown =
+                    Some(Timer::new(player.glide_skill.cooldown, TimerMode::Once));
+            }
+        }
+    }
+}
 fn move_player(
     mut query: Query<(
         &ActionState<input::Action>,
         &mut TnuaController,
         &mut input::Player,
+        &mut ColliderMassProperties,
         &mut TnuaSimpleAirActionsCounter,
     )>,
+    time: Res<Time>,
 ) {
-    let (action_state, mut controller, mut player, mut air_actions_counter) = query.single_mut();
+    let (action_state, mut controller, mut player, mut mass_properties, mut air_actions_counter) =
+        query.single_mut();
     // Each action has a button-like state of its own that you can check
     //println!("move_player {:?}",action_state);
     air_actions_counter.update(controller.as_mut());
@@ -450,6 +513,7 @@ fn move_player(
         float_height: 2.,
         ..Default::default()
     });
+
     if (!controller.is_airborne().unwrap() || player.dash_skill.air)
         && player.dash_skill.max_dash > player.used_dashes
         && action_state.just_pressed(&input::Action::Dash)
@@ -468,7 +532,42 @@ fn move_player(
             ..default()
         });
     }
+    if controller.is_airborne().unwrap()
+        && action_state.pressed(&input::Action::Glide)
+        && (match &player.glide_timer {
+            Some(timer) => !timer.finished(),
+            None => true,
+        })
+        && player.used_glides < player.glide_skill.max_uses
+    {
+        if action_state.just_pressed(&input::Action::Glide) {
+            player.used_glides += 1;
+            player.glide_timer = Some(Timer::new(player.glide_skill.max_duration, TimerMode::Once));
+        } else if let Some(timer) = &mut player.glide_timer {
+            timer.tick(time.delta());
+        }
 
+        if player.glide_cooldown.is_none() {
+            player.glide_cooldown = Some(Timer::new(player.glide_skill.cooldown, TimerMode::Once))
+        }
+        controller.action(TnuaBuiltinJump {
+            height: 0.1,
+            fall_extra_gravity: -5.,
+            allow_in_air: true,
+            ..default()
+        });
+    } else if controller.is_airborne().unwrap() && action_state.just_released(&input::Action::Glide) && !action_state.pressed(&input::Action::Jump)
+    {
+        player.glide_timer = None;        
+        controller.action(TnuaBuiltinJump {
+            height: -0.1,
+            fall_extra_gravity: 20.,
+            allow_in_air: true,
+            ..default()
+        });
+    }else if !controller.is_airborne().unwrap(){
+        player.glide_timer = None; 
+    }
     if action_state.pressed(&input::Action::Jump) {
         let air_jumps: usize = (player.jump_skill.max_jumps - 1).into();
         controller.action(TnuaBuiltinJump {
@@ -552,6 +651,8 @@ fn killing_floor(
 struct DashSkillDisplay;
 #[derive(Component)]
 struct JumpSkillDisplay;
+#[derive(Component)]
+struct GlideSkillDisplay;
 
 fn jump_skill_display(player: Query<&Player>, mut jumps: Query<&mut Text, With<JumpSkillDisplay>>) {
     let player = player.single();
@@ -571,6 +672,18 @@ fn dash_skill_display(
             "Dash: {}{}",
             player.dash_skill.max_dash - player.used_dashes,
             air
+        );
+    }
+}
+fn slow_fall_skill_display(
+    player: Query<&Player>,
+    mut jumps: Query<&mut Text, With<GlideSkillDisplay>>,
+) {
+    let player = player.single();
+    if let Ok(mut jumps_text) = jumps.get_single_mut() {
+        jumps_text.sections[0].value = format!(
+            "Glide: {}",
+            player.glide_skill.max_uses - player.used_glides
         );
     }
 }
@@ -675,6 +788,15 @@ fn start_level(
                         },
                     ))
                     .insert(TimeDisplay);
+                    ui.spawn(TextBundle::from_section(
+                        "Position:".to_string(),
+                        TextStyle {
+                            color: Color::WHITE,
+                            font_size: 24.0,
+                            ..default()
+                        },
+                    ))
+                    .insert(PositionDisplay);
                 });
                 ui.spawn(NodeBundle {
                     style: Style {
@@ -709,6 +831,17 @@ fn start_level(
                             },
                         ),
                         JumpSkillDisplay,
+                    ));
+                    skills.spawn((
+                        TextBundle::from_section(
+                            format!("Glide: {}", 0),
+                            TextStyle {
+                                color: Color::WHITE,
+                                font_size: 24.0,
+                                ..default()
+                            },
+                        ),
+                        GlideSkillDisplay,
                     ));
                 });
             });
@@ -750,6 +883,7 @@ fn start_level(
         (input::Action::Right, KeyCode::KeyD),
         (input::Action::Dash, KeyCode::ShiftLeft),
         (input::Action::Accept, KeyCode::Enter),
+        (input::Action::Glide, KeyCode::KeyW),
     ]);
     let player_mesh = meshes.add(Capsule3d::new(0.4, 2.));
     let player = commands
@@ -762,6 +896,7 @@ fn start_level(
         .insert(TnuaRapier3dSensorShape(Collider::ball(0.4)))
         .insert(TnuaControllerBundle::default())
         .insert(TnuaRapier3dIOBundle::default())
+        .insert(ColliderMassProperties::Density(1.0))
         .insert(input::Player {
             base_speed: 10.,
             base_jump_power: 5.,
@@ -772,15 +907,7 @@ fn start_level(
                 tier: UpgradeLevel::None,
                 air: false,
             },
-            dash_skill: DashSkill {
-                max_dash: 0,
-                tier: UpgradeLevel::None,
-                air: false,
-                cooldown: Duration::from_secs(10),
-            },
-            dash_cooldown: None,
-            used_dashes: 0,
-            score: 0.0,
+            ..default()
         })
         .insert(InputManagerBundle::with_map(input_map))
         .insert(TnuaSimpleAirActionsCounter::default())

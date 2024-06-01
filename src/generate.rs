@@ -4,9 +4,9 @@ use bevy_ecs::system::Resource;
 use cosiest_noisiest::{Frequency, NoiseGenerator};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
-use strum::IntoEnumIterator;
+use strum::{EnumCount, IntoEnumIterator};
 
-use crate::{upgrades, StatUpgrade, UpgradeType};
+use crate::{upgrades, StatUpgrade, UpgradeLevel, UpgradeType};
 
 #[derive(Resource, Clone)]
 pub struct Generator {
@@ -44,7 +44,6 @@ impl Generator {
     pub fn from_entropy(
         height_noise_settings: NoiseSettings,
         hole_noise_settings: NoiseSettings,
-
     ) -> Self {
         let rng = ChaCha20Rng::from_entropy();
         Self::new(rng, height_noise_settings, hole_noise_settings)
@@ -54,7 +53,6 @@ impl Generator {
         seed: [u8; 32],
         height_noise_settings: NoiseSettings,
         hole_noise_settings: NoiseSettings,
-
     ) -> Self {
         let rng = ChaCha20Rng::from_seed(seed);
         Self::new(rng, height_noise_settings, hole_noise_settings)
@@ -77,28 +75,28 @@ impl Generator {
             seed: rng.get_seed(),
             height_generator: NoiseGenerator::from_rng(
                 height_rng,
-                Frequency::from_wave_length(height_noise_settings.wave_length ),
+                Frequency::from_wave_length(height_noise_settings.wave_length),
                 height_noise_settings.amplitude,
                 height_noise_settings.octaves,
             ),
             hole_generator: NoiseGenerator::from_rng(
                 hole_rng,
-                Frequency::from_wave_length(hole_noise_settings.wave_length ),
+                Frequency::from_wave_length(hole_noise_settings.wave_length),
                 hole_noise_settings.amplitude,
                 hole_noise_settings.octaves,
             ),
             upgrades: upgrades::WeightedUpgrades::new(upgrade_rng),
         };
 
-        let weight_offset = 0.8;
-        let mut weight = 100.;
-        for (i,upgrade_level) in crate::UpgradeLevel::iter().enumerate() {
-            if upgrade_level == crate::UpgradeLevel::None{
+        let weight_offset = 0.2;
+        let mut weight = 50_000_000.;
+        for (i, upgrade_level) in crate::UpgradeLevel::iter().enumerate() {
+            if upgrade_level == crate::UpgradeLevel::None {
                 continue;
             }
             result.upgrades.add_upgrade(
                 UpgradeType::Speed(StatUpgrade {
-                    modifier: 1. + (0.1* (i as f32)),
+                    modifier: 1. + (0.1 * (i as f32)),
                     additive: false,
                     tier: upgrade_level,
                 }),
@@ -106,69 +104,55 @@ impl Generator {
             );
             result.upgrades.add_upgrade(
                 UpgradeType::JumpPower(StatUpgrade {
-                    modifier: 0.5* (i as f32),
+                    modifier: 0.5 * (i as f32),
                     additive: true,
                     tier: upgrade_level,
                 }),
                 weight,
             );
+            if upgrade_level != UpgradeLevel::Basic {
+                if i % (UpgradeLevel::COUNT / 4) == 0 {
+                    result.upgrades.add_upgrade(
+                        UpgradeType::GlideSkill(crate::GlideSkill {
+                            max_uses: 1 + (i / 4) as u8,
+                            tier: upgrade_level,
+                            cooldown: Duration::from_secs(10),
+                            max_duration: Duration::from_secs(2),
+                        }),
+                        weight,
+                    );
+                }
+                if i % (UpgradeLevel::COUNT / 3) == 0 {
+                    result.upgrades.add_upgrade(
+                        UpgradeType::JumpSkill(crate::JumpSkill {
+                            max_jumps: 1 + (i / 3) as u8,
+                            tier: upgrade_level,
+                            air: true,
+                        }),
+                        weight,
+                    );
+                }
+                if i % 2 == 0 {
+                    result.upgrades.add_upgrade(
+                        UpgradeType::DashSkill(crate::DashSkill {
+                            max_dash: 1 + (i / 4) as u8,
+                            tier: upgrade_level,
+                            air: upgrade_level > UpgradeLevel::Advanced,
+                            cooldown: Duration::from_secs(8 * (11 / i) as u64),
+                        }),
+                        weight,
+                    );
+                }
+            }
             weight *= weight_offset;
         }
-
-        result.upgrades.add_upgrade(UpgradeType::JumpSkill(crate::JumpSkill{
-            max_jumps:2,
-            tier:crate::UpgradeLevel::Advanced,
-            air:true
-        }), 50.);
-        result.upgrades.add_upgrade(UpgradeType::JumpSkill(crate::JumpSkill{
-            max_jumps:3,
-            tier:crate::UpgradeLevel::Master,
-            air:true
-        }), 20.);
-
-        result.upgrades.add_upgrade(
-            UpgradeType::DashSkill(crate::DashSkill {
-                max_dash: 1,
-                tier: crate::UpgradeLevel::Basic,
-                air:false,
-                cooldown:Duration::from_secs(8)
-            }),
-            100.,
-        );
-        result.upgrades.add_upgrade(
-            UpgradeType::DashSkill(crate::DashSkill {
-                max_dash: 2,
-                tier: crate::UpgradeLevel::Improved,
-                air:false,
-                cooldown:Duration::from_secs(8)
-            }),
-            80.,
-        );
-        result.upgrades.add_upgrade(
-            UpgradeType::DashSkill(crate::DashSkill {
-                max_dash: 2,
-                tier: crate::UpgradeLevel::Enhanced,
-                air:false,
-                cooldown:Duration::from_secs(7)
-            }),
-            64.,
-        );
-        result.upgrades.add_upgrade(
-            UpgradeType::DashSkill(crate::DashSkill {
-                max_dash: 2,
-                tier: crate::UpgradeLevel::Advanced,
-                air:true,
-                cooldown:Duration::from_secs(7)
-            }),
-            51.,
-        );
         result
     }
     pub fn get_height(&mut self, x: usize) -> f64 {
         self.height_generator.sample(x)
     }
-    pub fn get_heights(&mut self,start:usize)->[f64;1024]{
-        let mut result = [0.0f64;1024];
+    pub fn get_heights(&mut self, start: usize) -> [f64; 1024] {
+        let mut result = [0.0f64; 1024];
         self.height_generator.fill(start, &mut result);
         result
     }
