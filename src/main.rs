@@ -402,7 +402,7 @@ fn update_player_position_display(
     let (player_transform, velocity) = player.single_mut();
     if let Ok(mut score_text) = score.get_single_mut() {
         score_text.sections[0].value = format!(
-            "Position: [{:.1},{:.1},{:.1}]\r\nVelocity: [{:.1},{:.1},{:.1}]",
+            "Position: [{:+5.1},{:+5.1},{:+5.1}]\r\nVelocity: [{:+5.1},{:+5.1},{:+5.1}]",
             player_transform.translation.x,
             player_transform.translation.y,
             player_transform.translation.z,
