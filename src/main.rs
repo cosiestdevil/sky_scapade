@@ -16,7 +16,7 @@ use bevy::{
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
 };
-use bevy_dolly::prelude::*;
+use bevy_dolly::{dolly::rig::CameraRig, prelude::*};
 use bevy_ecs::system::EntityCommands;
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 #[cfg(feature = "bevy_mod_taa")]
@@ -40,7 +40,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 mod discord;
-mod camera;
 mod generate;
 mod input;
 mod menu;
@@ -108,7 +107,7 @@ fn main() {
         Update,
         (
             move_player,
-            update_camera,
+            move_camera_based_on_speed,
             upgrade_notification_timers,
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
@@ -155,30 +154,28 @@ fn pause_level(mut physics: ResMut<RapierConfiguration>) {
 fn resume_level(mut physics: ResMut<RapierConfiguration>) {
     physics.physics_pipeline_active = true;
 }
-fn update_camera(q0: Query<(&Transform, &Velocity), With<Player>>, mut q1: Query<&mut Rig>) {
-    let (player, player_velocity) = q0.single().to_owned();
-    let mut rig = q1.single_mut();
-    let offset = 20. + (player_velocity.linvel.x.abs());
-    rig.driver_mut::<camera::MovableLookAt>()
-        .set_position_target(player.translation, Vec3::new(0.0, 6., offset));
-}
 fn move_camera_based_on_speed(
-    mut query_camera: Query<(&mut Projection, &mut Transform), With<Camera>>,
-    velocities: Query<&Velocity, With<Player>>,
+    mut query_camera: Query<&mut Projection, With<Camera>>,
+    player: Query<(&Velocity, &Transform), With<Player>>,
+    mut rig: Query<&mut Rig>,
+    mut generator: ResMut<generate::Generator>,
 ) {
     let (projection, mut transform) = query_camera.single_mut();
     let Projection::Perspective(persp) = projection.into_inner() else {
         return;
     };
-    let player_velocity = velocities.single();
+    let (player_velocity, player_transform) = player.single();
     let min_fov = 45.;
     let max_fov = 120.;
     let fov_modifier = (player_velocity.linvel.x.abs().powf(0.125) / 8.).clamp(0., 1.);
 
     persp.fov = interpolate(min_fov, max_fov, fov_modifier).to_radians();
-    let positive = player_velocity.linvel.x > 0.;
-    transform.translation.x =
-        (player_velocity.linvel.x.abs().sqrt() / 4.) * if positive { 1. } else { -1. };
+    let mut rig = rig.single_mut();
+    let x_offset = ((player_velocity.linvel.x / 4.) * 1000.).round() / 1000.;
+    let y_offset = ((player_velocity.linvel.y / 128.) * 100.).round() / 100.;
+    info!("{x_offset:?},{y_offset:?}");
+    rig.driver_mut::<CustomCameraRig>()
+        .update_arm(Vec3::new(x_offset, 10. + y_offset, 20.))
 }
 fn interpolate(pa: f32, pb: f32, px: f32) -> f32 {
     let ft = px * std::f32::consts::PI;
@@ -705,8 +702,10 @@ fn start_level(
     assets: StartLevelAssets,
     mut next_state: ResMut<NextState<InGameState>>,
     mut discord_activity: ResMut<discord::ActivityState>,
+    mut q1: Query<&mut Rig, With<crate::MainCamera>>,
     mut generator: ResMut<generate::Generator>,
 ) {
+    let mut rig = q1.single_mut();
     next_state.set(InGameState::Playing);
 
     let (asset_server, mut images, mut materials, mut meshes) = assets;
@@ -925,6 +924,10 @@ fn start_level(
         )))
         .set_parent(level)
         .id();
+    // rig.driver_mut::<crate::CustomCameraRig>().set_position(
+    //     Vec3::new(1.5 * cube_size, (heights[0] as f32) + (3.5 * cube_size), 0.),
+    //     Vec3::new(1.5 * cube_size, (heights[0] as f32) + (3.5 * cube_size), 0.),
+    // );
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
             shadows_enabled: true,
@@ -939,8 +942,14 @@ fn start_level(
     if let Ok((camera, mut camera_transform)) = camera.get_single_mut() {
         // =
         commands.entity(camera).set_parent(player);
-        *camera_transform =
-            Transform::from_xyz(0.0, 5., 20.).looking_at(Vec3::new(0., 0., 0.), Vec3::Y)
+        // *camera_transform = Transform::from_xyz(
+        //     1.5 * cube_size,
+        //     (heights[0] as f32) + (3.5 * cube_size),
+        //     0.,
+        // )
+        //     .looking_at(Vec3::new(1.5 * cube_size,
+        //         (heights[0] as f32) + (3.5 * cube_size),
+        //         0.), Vec3::Y)
     }
     for (x, hy) in heights.into_iter().enumerate().skip(1).take(5) {
         let hy = (hy as f32) * cube_size;
@@ -1081,6 +1090,42 @@ fn skybox_loaded(
     }
 }
 
+#[derive(Component, Debug, Deref, DerefMut)]
+pub struct CustomCameraRig {
+    #[deref]
+    rig: CameraRig,
+}
+
+impl CustomCameraRig {
+    pub fn new(lookat: Vec3, arm: Vec3) -> Self {
+        Self {
+            rig: CameraRig::builder()
+                //.with(LockPosition::new().y(1.0))
+                .with(Position::new(lookat))
+                .with(Smooth::new_position(100.).predictive(true))
+                .with(Arm::new(arm))
+                .with(
+                    LookAt::new(lookat), //.tracking_smoothness(1.25)//.tracking_predictive(true),
+                )
+                .with(Smooth::new_rotation(2.5))
+                .build(),
+        }
+    }
+    pub fn set_position(&mut self, position: Vec3, lookat: Vec3) {
+        self.driver_mut::<Position>().position = position;
+        self.driver_mut::<LookAt>().target = lookat + Vec3::Y;
+    }
+    pub fn update_arm(&mut self, arm: Vec3) {
+        self.driver_mut::<Arm>().offset = arm;
+    }
+}
+
+impl RigDriver for CustomCameraRig {
+    fn update(&mut self, params: bevy_dolly::dolly::prelude::RigUpdateParams) -> Transform {
+        self.rig.update(params.delta_time_seconds)
+    }
+}
+
 fn setup(
     mut commands: Commands,
     settings: Res<settings::SettingsResource>,
@@ -1091,6 +1136,14 @@ fn setup(
     window.visible = true;
     let skybox_handle = asset_server.load("skybox/cube.png");
     commands.insert_resource(SkyboxHandle(skybox_handle));
+
+    let mut camera = commands.spawn((
+        MainCamera, // The rig component tag
+        Rig::builder()
+            .with(CustomCameraRig::new(Vec3::ZERO, Vec3::new(0., 5., 20.)))
+            .build(),
+        Camera3dBundle::default(),
+    ));
     // spawn a camera to be able to see anything
     if let settings::AntiAliasOption::Taa = settings.anti_alias {
         camera.insert(TAABundle::default());
@@ -1105,17 +1158,9 @@ fn setup(
             mode: bevy::audio::PlaybackMode::Loop,
             volume: Volume::new(0.2),
             ..default()
+        },
     });
-    commands.spawn((
-        MainCamera, // The rig component tag
-        Rig::builder()
-            .with(camera::MovableLookAt::from_position_target(
-                Vec3::ZERO,
-                Vec3::ZERO,
-            ))
-            .build(),
-        Camera3dBundle::default(),
-    ));
+
     commands
         .spawn(NodeBundle {
             style: Style {

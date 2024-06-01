@@ -239,8 +239,8 @@ fn enter_main_menu(
 
     
     let mut rig = q1.single_mut();
-    rig.driver_mut::<crate::camera::MovableLookAt>()
-        .set_position_target(Vec3::ZERO,Vec3::ZERO);
+    rig.driver_mut::<crate::CustomCameraRig>()
+        .set_position(Vec3::ZERO,Vec3::ZERO);
     let safe_ui = safe_ui.get_single();
     if let Ok(safe_ui) = safe_ui {
         let mut safe_ui = commands.entity(safe_ui);
