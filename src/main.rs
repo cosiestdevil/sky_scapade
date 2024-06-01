@@ -36,10 +36,7 @@ use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
     action_state::ActionState, input_map::InputMap, plugin::InputManagerPlugin, InputManagerBundle,
 };
-use std::{
-    default,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strum::{EnumCount, EnumIter};
 mod discord;
 mod generate;
@@ -485,17 +482,24 @@ fn glide_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
         }
     }
 }
+
+#[derive(Component)]
+struct Glider;
+
 fn move_player(
+    mut commands: Commands,
     mut query: Query<(
+        Entity,
         &ActionState<input::Action>,
         &mut TnuaController,
         &mut input::Player,
-        &mut ColliderMassProperties,
         &mut TnuaSimpleAirActionsCounter,
     )>,
+    glider_query: Query<Entity, With<Glider>>,
+    asset_server: ResMut<AssetServer>,
     time: Res<Time>,
 ) {
-    let (action_state, mut controller, mut player, mut mass_properties, mut air_actions_counter) =
+    let (player_entity, action_state, mut controller, mut player, mut air_actions_counter) =
         query.single_mut();
     // Each action has a button-like state of its own that you can check
     //println!("move_player {:?}",action_state);
@@ -543,10 +547,21 @@ fn move_player(
         if action_state.just_pressed(&input::Action::Glide) {
             player.used_glides += 1;
             player.glide_timer = Some(Timer::new(player.glide_skill.max_duration, TimerMode::Once));
+            let mut player_entity = commands.entity(player_entity);
+            let glider_scene: Handle<Scene> = asset_server.load("glider.glb#Scene0");
+            player_entity.with_children(|child| {
+                child.spawn((
+                    Glider,
+                    SceneBundle {
+                        scene: glider_scene,
+                        transform: Transform::from_xyz(0., 3., 0.),
+                        ..default()
+                    },
+                ));
+            });
         } else if let Some(timer) = &mut player.glide_timer {
             timer.tick(time.delta());
         }
-
         if player.glide_cooldown.is_none() {
             player.glide_cooldown = Some(Timer::new(player.glide_skill.cooldown, TimerMode::Once))
         }
@@ -556,26 +571,37 @@ fn move_player(
             allow_in_air: true,
             ..default()
         });
-    } else if controller.is_airborne().unwrap() && action_state.just_released(&input::Action::Glide) && !action_state.pressed(&input::Action::Jump)
-    {
-        player.glide_timer = None;        
-        controller.action(TnuaBuiltinJump {
-            height: -0.1,
-            fall_extra_gravity: 20.,
-            allow_in_air: true,
-            ..default()
-        });
-    }else if !controller.is_airborne().unwrap(){
-        player.glide_timer = None; 
     }
+    let mut glide_over = player.glide_timer.is_some() &&(!controller.is_airborne().unwrap()
+        || action_state.just_released(&input::Action::Glide)
+        || match &player.glide_timer {
+            Some(timer) => timer.finished(),
+            None => false,
+        });    
     if action_state.pressed(&input::Action::Jump) {
         let air_jumps: usize = (player.jump_skill.max_jumps - 1).into();
+        glide_over = player.glide_timer.is_some();
         controller.action(TnuaBuiltinJump {
             height: player.jump_power(),
             allow_in_air: player.jump_skill.air
                 && air_actions_counter.air_count_for(TnuaBuiltinJump::NAME) <= air_jumps,
             ..default()
         });
+    }
+
+    if glide_over {
+        player.glide_timer = None;
+        if let Ok(glider) = glider_query.get_single() {
+            commands.entity(glider).despawn_recursive();
+        }
+        if !action_state.pressed(&input::Action::Jump) {
+            controller.action(TnuaBuiltinJump {
+                height: 0.1,
+                fall_extra_gravity: 20.,
+                allow_in_air: true,
+                ..default()
+            });
+        }
     }
 }
 
