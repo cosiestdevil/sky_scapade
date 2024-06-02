@@ -7,6 +7,7 @@ use bevy::{
     audio::Volume,
     core_pipeline::Skybox,
     log,
+    math::vec3,
     prelude::*,
     render::{
         render_asset::RenderAssetUsages,
@@ -34,7 +35,11 @@ use generate::NoiseSettings;
 use input::Player;
 use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
-    action_state::ActionState, input_map::InputMap, plugin::InputManagerPlugin, InputManagerBundle,
+    action_state::ActionState,
+    axislike::{AxisType, DualAxis, SingleAxis},
+    input_map::InputMap,
+    plugin::InputManagerPlugin,
+    InputManagerBundle,
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strum::{EnumCount, EnumIter};
@@ -511,8 +516,15 @@ fn move_player(
     if action_state.pressed(&input::Action::Right) {
         direction += Vec3::X;
     }
+    if action_state.pressed(&input::Action::Move) {
+        let xy = 0.2 + action_state
+            .clamped_axis_pair(&input::Action::Move)
+            .unwrap()
+            .xy();
+        direction = Vec3::new(xy.x, 0., 0.)
+    }
     controller.basis(TnuaBuiltinWalk {
-        desired_velocity: direction.normalize_or_zero() * player.max_speed(),
+        desired_velocity: direction.clamp(-Vec3::X, Vec3::X) * player.max_speed(),
         desired_forward: direction.normalize_or_zero(),
         float_height: 2.,
         ..Default::default()
@@ -572,12 +584,13 @@ fn move_player(
             ..default()
         });
     }
-    let mut glide_over = player.glide_timer.is_some() &&(!controller.is_airborne().unwrap()
-        || action_state.just_released(&input::Action::Glide)
-        || match &player.glide_timer {
-            Some(timer) => timer.finished(),
-            None => false,
-        });    
+    let mut glide_over = player.glide_timer.is_some()
+        && (!controller.is_airborne().unwrap()
+            || action_state.just_released(&input::Action::Glide)
+            || match &player.glide_timer {
+                Some(timer) => timer.finished(),
+                None => false,
+            });
     if action_state.pressed(&input::Action::Jump) {
         let air_jumps: usize = (player.jump_skill.max_jumps - 1).into();
         glide_over = player.glide_timer.is_some();
@@ -903,14 +916,16 @@ fn start_level(
             0.,
         )))
         .set_parent(level);
-    let input_map = InputMap::new([
-        (input::Action::Jump, KeyCode::Space),
-        (input::Action::Left, KeyCode::KeyA),
-        (input::Action::Right, KeyCode::KeyD),
-        (input::Action::Dash, KeyCode::ShiftLeft),
-        (input::Action::Accept, KeyCode::Enter),
-        (input::Action::Glide, KeyCode::KeyW),
-    ]);
+    let mut input_map = InputMap::default();
+    input_map.insert(input::Action::Jump, KeyCode::Space);
+    input_map.insert(input::Action::Jump, GamepadButtonType::South);
+    input_map.insert(input::Action::Left, KeyCode::KeyA);
+    input_map.insert(input::Action::Right, KeyCode::KeyD);
+    input_map.insert(input::Action::Move, DualAxis::left_stick());
+    input_map.insert(input::Action::Dash, KeyCode::ShiftLeft);
+    input_map.insert(input::Action::Accept, KeyCode::Enter);
+    input_map.insert(input::Action::Glide, KeyCode::KeyW);
+
     let player_mesh = meshes.add(Capsule3d::new(0.4, 2.));
     let player = commands
         .spawn(Collider::capsule_y(1., 0.4))

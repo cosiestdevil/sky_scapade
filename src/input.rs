@@ -7,6 +7,7 @@ use crate::{DashSkill, JumpSkill, StatUpgrade,GlideSkill};
 pub enum Action {
     Left,
     Right,
+    Move,
     Jump,
     Dash,
     Glide,
