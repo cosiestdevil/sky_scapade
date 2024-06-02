@@ -1,10 +1,12 @@
-
-use crate::settings::*;
+use crate::generate::NoiseSettings;
 use crate::{discord::ActivityState, UiHelper};
-use bevy::{
-    app::AppExit,
-    prelude::*
+use crate::{generate, settings::*};
+use bevy::{app::AppExit, prelude::*};
+use bevy_simple_text_input::{
+    TextInputBundle, TextInputPlugin, TextInputValue,
 };
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
@@ -12,12 +14,19 @@ impl Plugin for MenuPlugin {
         app.insert_state(MainMenuState::Menu);
         app.add_systems(
             Update,
-            (main_menu_button_system, settings_menu_button_system),
+            (
+                main_menu_button_system,
+                settings_menu_button_system,
+                new_game_menu_system,
+            ),
         );
+        app.add_plugins(TextInputPlugin);
         app.add_systems(OnEnter(crate::AppState::MainMenu), enter_main_menu);
         app.add_systems(OnExit(crate::AppState::MainMenu), exit_main_menu);
         app.add_systems(OnEnter(MainMenuState::Settings), enter_settings);
         app.add_systems(OnExit(MainMenuState::Settings), exit_settings);
+        app.add_systems(OnEnter(MainMenuState::NewGame), enter_new_game);
+        app.add_systems(OnExit(MainMenuState::NewGame), exit_new_game);
     }
 }
 
@@ -97,6 +106,62 @@ fn settings_menu_button_system(
         }
     }
 }
+#[allow(clippy::type_complexity)]
+fn new_game_menu_system(
+    mut commands: Commands,
+    mut interaction_query: Query<
+        (
+            &Interaction,
+            &Children,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        (Changed<Interaction>, With<NewGameStartButton>),
+    >,
+    mut text_input_query: Query<&mut TextInputValue, With<NewGameSeedInput>>,
+    mut next_state: ResMut<NextState<crate::AppState>>,
+    mut next_menu: ResMut<NextState<MainMenuState>>,
+    mut text_query: Query<&mut Text>,
+) {
+    for (interaction, children, mut color, mut border_color) in &mut interaction_query {
+        let mut text = text_query.get_mut(children[0]).unwrap();
+        match *interaction {
+            Interaction::Hovered => {
+                *color = Color::RED.into();
+                border_color.0 = Color::WHITE;
+                text.sections[0].style.color = Color::WHITE;
+            }
+            Interaction::None => {
+                *color = Color::WHITE.into();
+                border_color.0 = Color::RED;
+                text.sections[0].style.color = Color::RED;
+            }
+            Interaction::Pressed => {
+                let mut text_input = text_input_query.single_mut();
+                let mut seed = [0_u8; 32];                
+                if text_input.0.is_empty() {
+                    text_input.0 = thread_rng().sample_iter(&Alphanumeric).take(32).map(char::from).collect();
+                }
+                let input_text = text_input.0.as_bytes();
+                for i in 0..32 {
+                    if input_text.len() > i {
+                        seed[i] = input_text[i];
+                    } else {
+                        break;
+                    }
+                }
+                let generator = generate::Generator::from_seed(
+                    seed,
+                    NoiseSettings::new(256_usize, 64, 5),
+                    NoiseSettings::new(9_usize, 64, 3),
+                );
+                commands.insert_resource(generator);
+                next_state.set(crate::AppState::InGame);
+                next_menu.set(MainMenuState::Menu);
+            }
+        }
+    }
+}
 
 type ButtonInteractionFilter = (Changed<Interaction>, With<Button>);
 fn main_menu_button_system(
@@ -110,7 +175,7 @@ fn main_menu_button_system(
         ),
         ButtonInteractionFilter,
     >,
-    mut next_state: ResMut<NextState<crate::AppState>>,
+
     mut next_menu: ResMut<NextState<MainMenuState>>,
     mut text_query: Query<&mut Text>,
     mut exit: EventWriter<AppExit>,
@@ -122,7 +187,7 @@ fn main_menu_button_system(
                 *color = Color::BLACK.into();
                 border_color.0 = Color::RED;
                 match button.0 {
-                    MainMenuButton::NewGame => next_state.set(crate::AppState::InGame),
+                    MainMenuButton::NewGame => next_menu.set(MainMenuState::NewGame),
                     MainMenuButton::Settings => next_menu.set(MainMenuState::Settings),
                     MainMenuButton::Exit => {
                         exit.send(AppExit);
@@ -229,6 +294,64 @@ fn exit_main_menu(main_menu: Query<Entity, ExitMainMenuFilter>, mut commands: Co
         commands.entity(main_menu).despawn_recursive();
     }
 }
+fn exit_new_game(new_game_menu: Query<Entity, With<NewGameMenu>>, mut commands: Commands) {
+    let new_game_menu = new_game_menu.get_single();
+    if let Ok(new_game_menu) = new_game_menu {
+        commands.entity(new_game_menu).despawn_recursive();
+    }
+}
+fn enter_new_game(main_menu: Query<Entity, With<MainMenu>>, mut commands: Commands) {
+    let main_menu = main_menu.get_single();
+    if let Ok(main_menu) = main_menu {
+        let mut main_menu = commands.entity(main_menu);
+        main_menu.with_children(|menu_base| {
+            menu_base
+                .spawn((NewGameMenu, get_main_menu_menu_bundle()))
+                .with_children(|parent| {
+                    parent.spawn(TextBundle::from_section(
+                        "New Game",
+                        TextStyle {
+                            color: Color::WHITE,
+                            font_size: 42.0,
+                            ..default()
+                        },
+                    ));
+                    parent
+                        .spawn(NodeBundle::default())
+                        .with_children(|seed_input| {
+                            seed_input.spawn(TextBundle::from_section(
+                                "Seed: ",
+                                TextStyle {
+                                    color: Color::WHITE,
+                                    font_size: 42.0,
+                                    ..default()
+                                },
+                            ));
+                            seed_input.spawn((
+                                NodeBundle {
+                                    style: Style {
+                                        width: Val::Px(200.0),
+                                        border: UiRect::all(Val::Px(2.0)),
+                                        padding: UiRect::all(Val::Px(2.0)),
+                                        ..default()
+                                    },
+                                    border_color: Color::RED.into(),
+                                    background_color: Color::WHITE.into(),
+                                    ..default()
+                                },
+                                NewGameSeedInput,
+                                TextInputBundle::default().with_text_style(TextStyle {
+                                    font_size: 22.,
+                                    color: Color::RED,
+                                    ..default()
+                                }),
+                            ));
+                        });
+                    parent.new_menu_button("Start", NewGameStartButton);
+                });
+        });
+    }
+}
 
 fn enter_settings(
     main_menu: Query<Entity, With<MainMenu>>,
@@ -317,6 +440,13 @@ fn exit_settings(settings_menu: Query<Entity, With<SettingsMenu>>, mut commands:
 struct MainMenu;
 #[derive(Component)]
 struct SettingsMenu;
+#[derive(Component)]
+struct NewGameMenu;
+
+#[derive(Component)]
+struct NewGameSeedInput;
+#[derive(Component)]
+struct NewGameStartButton;
 enum SettingsMenuButton {
     Apply,
     FrameLimit,

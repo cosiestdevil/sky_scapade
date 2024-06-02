@@ -41,6 +41,7 @@ impl Generator {
         let rng = ChaCha20Rng::seed_from_u64(seed);
         Self::new(rng, height_noise_settings, hole_noise_settings)
     }
+    #[allow(dead_code)]
     pub fn from_entropy(
         height_noise_settings: NoiseSettings,
         hole_noise_settings: NoiseSettings,
@@ -48,7 +49,7 @@ impl Generator {
         let rng = ChaCha20Rng::from_entropy();
         Self::new(rng, height_noise_settings, hole_noise_settings)
     }
-    #[allow(dead_code)]
+    
     pub fn from_seed(
         seed: [u8; 32],
         height_noise_settings: NoiseSettings,

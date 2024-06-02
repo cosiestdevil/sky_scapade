@@ -1,5 +1,4 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use base64::prelude::*;
 #[cfg(not(feature = "bevy_mod_taa"))]
 use bevy::core_pipeline::experimental::taa::TemporalAntiAliasBundle as TAABundle;
 use bevy::{
@@ -7,7 +6,6 @@ use bevy::{
     audio::Volume,
     core_pipeline::Skybox,
     log,
-    math::vec3,
     prelude::*,
     render::{
         render_asset::RenderAssetUsages,
@@ -31,17 +29,16 @@ use bevy_tnua::{
     TnuaAction,
 };
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
-use generate::NoiseSettings;
 use input::Player;
 use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
     action_state::ActionState,
-    axislike::{AxisType, DualAxis, SingleAxis},
+    axislike::DualAxis,
     input_map::InputMap,
     plugin::InputManagerPlugin,
     InputManagerBundle,
 };
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{str::from_utf8, time::{Duration, SystemTime, UNIX_EPOCH}};
 use strum::{EnumCount, EnumIter};
 mod discord;
 mod generate;
@@ -739,12 +736,10 @@ fn start_level(
     assets: StartLevelAssets,
     mut next_state: ResMut<NextState<InGameState>>,
     mut discord_activity: ResMut<discord::ActivityState>,
+    mut generator: ResMut<generate::Generator>
 ) {
     next_state.set(InGameState::Playing);
-    let mut generator = generate::Generator::from_entropy(
-        NoiseSettings::new(256_usize, 64, 5),
-        NoiseSettings::new(9_usize, 64, 3),
-    );
+
     let (asset_server, mut images, mut materials, mut meshes) = assets;
     let platform_mesh: Handle<Mesh> = asset_server.load("platform.obj");
     let debug_material = materials.add(StandardMaterial {
@@ -752,9 +747,11 @@ fn start_level(
         ..default()
     });
     discord_activity.state = Some("Playing Solo".into());
+    let seed= generator.get_seed();
+    let seed: &str = from_utf8(&seed).unwrap();
     discord_activity.details = Some(format!(
         "Seed: {}",
-        BASE64_STANDARD.encode(generator.get_seed())
+        seed
     ));
     discord_activity.start = Some(
         SystemTime::now()
@@ -789,7 +786,7 @@ fn start_level(
                 ..default()
             })
             .with_children(|ui| {
-                let seed = BASE64_STANDARD.encode(generator.get_seed());
+
                 ui.spawn(NodeBundle {
                     style: Style {
                         display: Display::Flex,
@@ -887,7 +884,6 @@ fn start_level(
         });
     }
     let heights = generator.get_heights(0);
-    commands.insert_resource(generator.clone());
     let level = commands
         .spawn((
             Level {
