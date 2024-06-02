@@ -139,7 +139,7 @@ impl Generator {
                             max_dash: 1 + (i / 4) as u8,
                             tier: upgrade_level,
                             air: upgrade_level > UpgradeLevel::Advanced,
-                            cooldown: Duration::from_secs(8 * (11 / i) as u64),
+                            cooldown: Duration::from_secs_f64(8. * ((UpgradeLevel::COUNT - i) as f64 / UpgradeLevel::COUNT as f64)),
                         }),
                         weight,
                     );
