@@ -923,8 +923,11 @@ fn start_level(
     input_map.insert(input::Action::Right, KeyCode::KeyD);
     input_map.insert(input::Action::Move, DualAxis::left_stick());
     input_map.insert(input::Action::Dash, KeyCode::ShiftLeft);
+    input_map.insert(input::Action::Dash, GamepadButtonType::West);
     input_map.insert(input::Action::Accept, KeyCode::Enter);
+    input_map.insert(input::Action::Accept, GamepadButtonType::South);
     input_map.insert(input::Action::Glide, KeyCode::KeyW);
+    input_map.insert(input::Action::Glide, GamepadButtonType::North);
 
     let player_mesh = meshes.add(Capsule3d::new(0.4, 2.));
     let player = commands
