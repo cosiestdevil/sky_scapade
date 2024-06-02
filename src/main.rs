@@ -639,11 +639,12 @@ fn killing_floor(
     mut commands: Commands,
     player: Query<(Entity, &Transform, &Player)>,
     mut next_state: ResMut<NextState<InGameState>>,
+    mut generator: ResMut<generate::Generator>,
     //safe_ui: Query<Entity, With<crate::SafeUi>>,
 ) {
     let (_entity, player_transform, player) = player.single();
-
-    if player_transform.translation.y < -10. {
+    let y = generator.get_height((player_transform.translation.x/2.) as usize) as f32; 
+    if player_transform.translation.y < y-10. {
         //let safe_ui = safe_ui.get_single();
         // if let Ok(safe_ui) = safe_ui {
         //     let mut safe_ui = commands.entity(safe_ui);
