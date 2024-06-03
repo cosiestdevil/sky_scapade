@@ -563,7 +563,7 @@ fn move_player(
                     Glider,
                     SceneBundle {
                         scene: glider_scene,
-                        transform: Transform::from_xyz(0., 3., 0.),
+                        transform: Transform::from_xyz(0., 2., 0.),
                         ..default()
                     },
                 ));
