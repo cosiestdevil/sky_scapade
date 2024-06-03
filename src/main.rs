@@ -32,13 +32,13 @@ use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dS
 use input::Player;
 use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
-    action_state::ActionState,
-    axislike::DualAxis,
-    input_map::InputMap,
-    plugin::InputManagerPlugin,
+    action_state::ActionState, axislike::DualAxis, input_map::InputMap, plugin::InputManagerPlugin,
     InputManagerBundle,
 };
-use std::{str::from_utf8, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{
+    str::from_utf8,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use strum::{EnumCount, EnumIter};
 mod discord;
 mod generate;
@@ -157,10 +157,11 @@ fn resume_level(mut physics: ResMut<RapierConfiguration>) {
 }
 
 fn move_camera_based_on_speed(
-    mut query_camera: Query<&mut Projection, With<Camera>>,
+    mut query_camera: Query<(&mut Projection, &mut Transform), With<Camera>>,
     velocities: Query<&Velocity, With<Player>>,
 ) {
-    let Projection::Perspective(persp) = query_camera.single_mut().into_inner() else {
+    let (projection, mut transform) = query_camera.single_mut();
+    let Projection::Perspective(persp) = projection.into_inner() else {
         return;
     };
     let player_velocity = velocities.single();
@@ -169,6 +170,8 @@ fn move_camera_based_on_speed(
     let fov_modifier = (player_velocity.linvel.x.abs().powf(0.125) / 8.).clamp(0., 1.);
 
     persp.fov = interpolate(min_fov, max_fov, fov_modifier).to_radians();
+    transform.translation.x = player_velocity.linvel.x.sqrt() / 4.;
+    
 }
 fn interpolate(pa: f32, pb: f32, px: f32) -> f32 {
     let ft = px * std::f32::consts::PI;
@@ -405,9 +408,9 @@ fn update_player_position_display(
             player_transform.translation.x,
             player_transform.translation.y,
             player_transform.translation.z,
-            velocity.linvel.x *0.681818,
-            velocity.linvel.y *0.681818,
-            velocity.linvel.z *0.681818
+            velocity.linvel.x * 0.681818,
+            velocity.linvel.y * 0.681818,
+            velocity.linvel.z * 0.681818
         );
     }
 }
@@ -514,10 +517,11 @@ fn move_player(
         direction += Vec3::X;
     }
     if action_state.pressed(&input::Action::Move) {
-        let xy = 0.2 + action_state
-            .clamped_axis_pair(&input::Action::Move)
-            .unwrap()
-            .xy();
+        let xy = 0.2
+            + action_state
+                .clamped_axis_pair(&input::Action::Move)
+                .unwrap()
+                .xy();
         direction = Vec3::new(xy.x, 0., 0.)
     }
     controller.basis(TnuaBuiltinWalk {
@@ -643,8 +647,8 @@ fn killing_floor(
     //safe_ui: Query<Entity, With<crate::SafeUi>>,
 ) {
     let (_entity, player_transform, player) = player.single();
-    let y = generator.get_height((player_transform.translation.x/2.) as usize) as f32; 
-    if player_transform.translation.y < y-10. {
+    let y = generator.get_height((player_transform.translation.x / 2.) as usize) as f32;
+    if player_transform.translation.y < y - 10. {
         //let safe_ui = safe_ui.get_single();
         // if let Ok(safe_ui) = safe_ui {
         //     let mut safe_ui = commands.entity(safe_ui);
@@ -737,7 +741,7 @@ fn start_level(
     assets: StartLevelAssets,
     mut next_state: ResMut<NextState<InGameState>>,
     mut discord_activity: ResMut<discord::ActivityState>,
-    mut generator: ResMut<generate::Generator>
+    mut generator: ResMut<generate::Generator>,
 ) {
     next_state.set(InGameState::Playing);
 
@@ -748,12 +752,9 @@ fn start_level(
         ..default()
     });
     discord_activity.state = Some("Playing Solo".into());
-    let seed= generator.get_seed();
+    let seed = generator.get_seed();
     let seed: &str = from_utf8(&seed).unwrap();
-    discord_activity.details = Some(format!(
-        "Seed: {}",
-        seed
-    ));
+    discord_activity.details = Some(format!("Seed: {}", seed));
     discord_activity.start = Some(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -787,7 +788,6 @@ fn start_level(
                 ..default()
             })
             .with_children(|ui| {
-
                 ui.spawn(NodeBundle {
                     style: Style {
                         display: Display::Flex,
@@ -975,8 +975,8 @@ fn start_level(
     if let Ok((camera, mut camera_transform)) = camera.get_single_mut() {
         // =
         commands.entity(camera).set_parent(player);
-        *camera_transform = Transform::from_xyz(0.0, cube_size * 5., cube_size * 20.)
-            .looking_at(Vec3::new(0., 0., 0.), Vec3::Y)
+        *camera_transform =
+            Transform::from_xyz(0.0, 5., 20.).looking_at(Vec3::new(0., 0., 0.), Vec3::Y)
     }
     for (x, hy) in heights.into_iter().enumerate().skip(1).take(5) {
         let hy = (hy as f32) * cube_size;
