@@ -401,13 +401,13 @@ fn update_player_position_display(
     let (player_transform, velocity) = player.single_mut();
     if let Ok(mut score_text) = score.get_single_mut() {
         score_text.sections[0].value = format!(
-            "Position: [{:+5.1},{:+5.1},{:+5.1}]\r\nVelocity: [{:+5.1},{:+5.1},{:+5.1}]",
+            "Position: [{:+5.1},{:+5.1},{:+5.1}]\r\nVelocity: [{:+5.1}mph,{:+5.1}mph,{:+5.1}mph]",
             player_transform.translation.x,
             player_transform.translation.y,
             player_transform.translation.z,
-            velocity.linvel.x,
-            velocity.linvel.y,
-            velocity.linvel.z
+            velocity.linvel.x *0.681818,
+            velocity.linvel.y *0.681818,
+            velocity.linvel.z *0.681818
         );
     }
 }
