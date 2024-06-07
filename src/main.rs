@@ -30,7 +30,6 @@ use bevy_tnua::{
 };
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
 use input::Player;
-use iyes_perf_ui::PerfUiPlugin;
 use leafwing_input_manager::{
     action_state::ActionState, axislike::DualAxis, input_map::InputMap, plugin::InputManagerPlugin,
     InputManagerBundle,
@@ -62,7 +61,7 @@ fn main() {
                     //resolution: (2560.0, 1080.0).into(),
                     resolution: (1280., 720.).into(),
                     name: Some("new_game_1.app".into()),
-                    present_mode: PresentMode::Mailbox,
+                    present_mode: PresentMode::AutoVsync,
                     visible: false,
                     ..default()
                 }),
@@ -70,15 +69,8 @@ fn main() {
             })
             .set(ImagePlugin::default_nearest()),
     )
-    .insert_resource(RapierConfiguration {
-        // gravity: Vec2::ZERO,
-        timestep_mode: TimestepMode::Fixed {
-            dt: 1.0 / 64.0,
-            substeps: 1,
-        },
-        ..RapierConfiguration::new(1.0)
-    })
-    .add_plugins(RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule())
+    
+    .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
     //.add_plugins(RapierDebugRenderPlugin::default())
     .insert_resource(WinitSettings {
         focused_mode: UpdateMode::Continuous,
@@ -92,12 +84,12 @@ fn main() {
     .insert_state(AppState::MainMenu)
     //.add_plugins(ScreenDiagnosticsPlugin::default())
     //.add_plugins(ScreenFrameDiagnosticsPlugin)
-    .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
-    .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
+    //.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
+    //.add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
     //.add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin)
     //.add_plugins(system_info::SystemInformationDiagnosticsPlugin)
     .add_plugins(bevy_framepace::FramepacePlugin)
-    .add_plugins(PerfUiPlugin)
+    //.add_plugins(PerfUiPlugin)
     .add_systems(Startup, setup)
     .add_systems(Update, (temp, skybox_loaded));
     app.insert_state(InGameState::Playing);
@@ -170,7 +162,8 @@ fn move_camera_based_on_speed(
     let fov_modifier = (player_velocity.linvel.x.abs().powf(0.125) / 8.).clamp(0., 1.);
 
     persp.fov = interpolate(min_fov, max_fov, fov_modifier).to_radians();
-    transform.translation.x = player_velocity.linvel.x.sqrt() / 4.;
+    let positive = player_velocity.linvel.x > 0.;
+    transform.translation.x = (player_velocity.linvel.x.abs().sqrt() / 4.) * if positive{1.}else{-1.};
     
 }
 fn interpolate(pa: f32, pb: f32, px: f32) -> f32 {
