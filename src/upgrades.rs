@@ -1,7 +1,7 @@
 use core::panic;
 use std::time::Duration;
 
-use bevy::log::info;
+use bevy::{log::info, render::color::Color};
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 use strum::{EnumCount, EnumIter};
@@ -50,6 +50,8 @@ impl<R: Rng + Sized, T: Upgrade<T>+Debug> WeightedUpgrades<R, T> {
 
 pub trait Upgrade<T: Upgrade<T>>: Copy + Clone {
     fn is_lower(&self, other: T) -> bool;
+    fn tier(&self)->UpgradeLevel;
+    fn color(&self) -> Color;
 }
 #[derive(Debug, Copy, Clone)]
 pub enum UpgradeType {
@@ -59,6 +61,7 @@ pub enum UpgradeType {
     DashSkill(DashSkill),
     GlideSkill(GlideSkill),
 }
+
 
 #[derive(EnumIter, EnumCount, Debug, PartialEq, Copy, Clone, PartialOrd, Default)]
 pub enum UpgradeLevel {
@@ -74,6 +77,23 @@ pub enum UpgradeLevel {
     Epic,
     Legendary,
     Mythic,
+}
+impl UpgradeLevel{
+    pub fn color(&self) -> Color {
+        match self{
+            UpgradeLevel::None => Color::WHITE,
+            UpgradeLevel::Basic => Color::GRAY,
+            UpgradeLevel::Improved => Color::ALICE_BLUE,
+            UpgradeLevel::Enhanced => Color::BLUE,
+            UpgradeLevel::Advanced => Color::LIME_GREEN,
+            UpgradeLevel::Superior => Color::GREEN,
+            UpgradeLevel::Elite => Color::PINK,
+            UpgradeLevel::Master => Color::PURPLE,
+            UpgradeLevel::Epic => Color::GOLD,
+            UpgradeLevel::Legendary => Color::ORANGE_RED,
+            UpgradeLevel::Mythic => Color::RED,
+        }
+    }
 }
 #[derive(Debug, Copy, Clone, Default)]
 pub struct JumpSkill {
@@ -129,6 +149,22 @@ impl Upgrade<UpgradeType> for UpgradeType {
             },
         }
     }
+    
+    fn color(&self) -> Color {
+        self.tier().color()
+    }
+    
+    fn tier(&self)->UpgradeLevel {
+        match self{
+            UpgradeType::Speed(speed) => speed.tier,
+            UpgradeType::JumpPower(jump) => jump.tier,
+            UpgradeType::JumpSkill(jump) => jump.tier,
+            UpgradeType::DashSkill(dash) => dash.tier,
+            UpgradeType::GlideSkill(glide) => glide.tier,
+        }
+    }
+    
+    
 }
 
 
@@ -198,19 +234,6 @@ mod tests {
         Jump,
         Double,
     }
-    #[derive(EnumIter, EnumCount, Debug, PartialEq, Copy, Clone, PartialOrd)]
-    enum UpgradeLevel {
-        Basic,
-        Improved,
-        Enhanced,
-        Advanced,
-        Superior,
-        Elite,
-        Master,
-        Epic,
-        Legendary,
-        Mythic,
-    }
     #[derive(Debug, PartialEq, Copy, Clone)]
     struct Upgrade {
         upgrade_type: UpgradeType,
@@ -219,6 +242,14 @@ mod tests {
     impl crate::upgrades::Upgrade<Upgrade> for Upgrade {
         fn is_lower(&self, other: Upgrade) -> bool {
             self.upgrade_type == other.upgrade_type && self.upgrade_level <= other.upgrade_level
+        }
+        
+        fn tier(&self)->crate::UpgradeLevel {
+            self.upgrade_level
+        }
+        
+        fn color(&self) -> Color {
+            Color::WHITE
         }
     }
 }

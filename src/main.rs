@@ -11,7 +11,7 @@ use bevy::{
         render_asset::RenderAssetUsages,
         render_resource::{
             Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
-        },
+        }
     },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
@@ -43,11 +43,11 @@ mod generate;
 mod input;
 mod menu;
 mod settings;
+mod skills;
 mod system_info;
 mod upgrades;
-mod skills;
-use crate::upgrades::*;
 use crate::input::Player;
+use crate::upgrades::*;
 const GAME_NAME: &str = "SkyScapade";
 fn main() {
     let mut app = App::new();
@@ -71,7 +71,6 @@ fn main() {
             })
             .set(ImagePlugin::default_nearest()),
     )
-    
     .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
     //.add_plugins(RapierDebugRenderPlugin::default())
     .insert_resource(WinitSettings {
@@ -104,7 +103,11 @@ fn main() {
     app.add_systems(OnEnter(AppState::InGame), start_level);
     app.add_systems(
         Update,
-        (move_player, move_camera_based_on_speed)
+        (
+            move_player,
+            move_camera_based_on_speed,
+            upgrade_notification_timers,
+        )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
     app.add_plugins(skills::SkillPlugin);
@@ -165,8 +168,8 @@ fn move_camera_based_on_speed(
 
     persp.fov = interpolate(min_fov, max_fov, fov_modifier).to_radians();
     let positive = player_velocity.linvel.x > 0.;
-    transform.translation.x = (player_velocity.linvel.x.abs().sqrt() / 4.) * if positive{1.}else{-1.};
-    
+    transform.translation.x =
+        (player_velocity.linvel.x.abs().sqrt() / 4.) * if positive { 1. } else { -1. };
 }
 fn interpolate(pa: f32, pb: f32, px: f32) -> f32 {
     let ft = px * std::f32::consts::PI;
@@ -215,14 +218,57 @@ fn leave_end_screen(mut commands: Commands, screen: Query<Entity, With<EndScreen
 #[derive(Component)]
 struct EndScreen;
 #[derive(Component)]
-struct UpgradeScreen;
+struct UpgradeScreen {
+    opening_timer: Timer,
+    visible_timer: Timer,
+    closing_timer: Timer,
+}
+impl UpgradeScreen {
+    pub fn new() -> Self {
+        Self {
+            opening_timer: Timer::from_seconds(1., TimerMode::Once),
+            visible_timer: Timer::from_seconds(5., TimerMode::Once),
+            closing_timer: Timer::from_seconds(1., TimerMode::Once),
+        }
+    }
+}
+fn upgrade_notification_timers(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut notifications: Query<(Entity, &mut UpgradeScreen, &mut Style)>,
+) {
+    for (notification_entity, mut notification, mut transform) in notifications.iter_mut() {
+        if !notification.opening_timer.finished() {
+            notification.opening_timer.tick(time.delta());
+            transform.bottom = Val::Px(interpolate(
+                -100.,
+                0.,
+                notification.opening_timer.fraction(),
+            ));
+        } else if !notification.visible_timer.finished() {
+            notification.visible_timer.tick(time.delta());
+        } else if !notification.closing_timer.finished() {
+            notification.closing_timer.tick(time.delta());
+            transform.bottom = Val::Px(interpolate(
+                0.,
+                -100.,
+                notification.closing_timer.fraction(),
+            ));
+        } else {
+            let notification_entity = commands.entity(notification_entity);
+            notification_entity.despawn_recursive();
+        }
+    }
+}
+
 fn level_upgrade(
     mut commands: Commands,
     time: Res<Time>,
+    safe_ui: Query<Entity, With<crate::SafeUi>>,
     mut level: Query<&mut Level>,
     mut player: Query<&mut Player>,
     mut generator: ResMut<generate::Generator>,
-    mut next_state: ResMut<NextState<InGameState>>,
+    asset_server: Res<AssetServer>,
 ) {
     let mut level = level.single_mut();
     level.upgrade_timer.tick(time.delta());
@@ -254,46 +300,68 @@ fn level_upgrade(
                     display = format!("{} ({:?})", "Glide Upgrade", skill.tier);
                 }
             }
-            // let safe_ui = safe_ui.get_single();
-            // if let Ok(safe_ui) = safe_ui {
-            //     let mut safe_ui = commands.entity(safe_ui);
-            //     safe_ui.with_children(|ui| {
-            commands
-                .spawn((
-                    NodeBundle {
-                        style: Style {
-                            position_type: PositionType::Absolute,
-                            width: Val::Percent(100.),
-                            height: Val::Percent(100.),
-                            display: Display::Grid,
-                            align_items: AlignItems::Center,
-                            justify_items: JustifyItems::Center,
-                            ..default()
-                        },
-                        background_color: Color::rgba(0., 0., 0., 0.6).into(),
-                        ..default()
-                    },
-                    UpgradeScreen,
-                ))
-                .with_children(|screen| {
-                    screen.spawn(
-                        TextBundle::from_section(
-                            display,
-                            TextStyle {
-                                font_size: 48.,
+            commands.spawn(AudioBundle {
+                source: asset_server.load("upgrade.mp3"),
+                settings: PlaybackSettings {
+                    mode: bevy::audio::PlaybackMode::Once,
+                    volume: Volume::new(0.4),
+                    ..default()
+                },
+            });
+            
+            let safe_ui = safe_ui.get_single();
+            if let Ok(safe_ui) = safe_ui {
+                let mut safe_ui = commands.entity(safe_ui);
+                safe_ui.with_children(|ui| {
+                    ui.spawn((
+                        NodeBundle {
+                            style: Style {
+                                position_type: PositionType::Absolute,
+                                width: Val::Percent(30.),
+                                height: Val::Auto,
+                                left: Val::Percent(37.),
                                 ..default()
                             },
-                        )
-                        .with_text_justify(JustifyText::Center),
-                    );
+                            ..default()
+                        },
+                        UpgradeScreen::new(),
+                    ))
+                    .with_children(|screen| {
+                        screen
+                            .spawn(NodeBundle {
+                                style: Style {
+                                    display: Display::Grid,
+                                    align_items: AlignItems::Center,
+                                    justify_items: JustifyItems::Center,
+                                    max_width: Val::Percent(100.),
+                                    height: Val::Percent(100.),
+                                    border: UiRect::all(Val::Px(5.)),
+                                    padding:UiRect::all(Val::Px(5.)),
+                                    ..default()
+                                },
+                                border_color:upgrade.color().into(),
+                                background_color: Color::rgba(0., 0., 0., 0.6).into(),
+                                ..default()
+                            })
+                            .with_children(|container| {
+                                container.spawn(
+                                    TextBundle::from_section(
+                                        display,
+                                        TextStyle {
+                                            font_size: 20.,
+                                            ..default()
+                                        },
+                                    )
+                                    .with_text_justify(JustifyText::Center),
+                                );
+                            });
+                    });
                 });
-            // });
-            next_state.set(InGameState::Upgrade);
-            //}
+                //next_state.set(InGameState::Upgrade);
+            }
         }
     }
 }
-
 
 #[derive(Component)]
 struct Score;
@@ -1030,7 +1098,7 @@ fn setup(
         source: asset_server.load("Neon Heights.mp3"),
         settings: PlaybackSettings {
             mode: bevy::audio::PlaybackMode::Loop,
-            volume: Volume::new(0.4),
+            volume: Volume::new(0.2),
             ..default()
         },
     });
