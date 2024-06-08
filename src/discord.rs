@@ -56,8 +56,6 @@ pub struct ActivityState {
     pub state: Option<String>,
     /// What the player is currently doing
     pub details: Option<String>,
-    /// Whether this activity is an instanced context, like a match
-    pub instance: Option<bool>,
     /// Start time of Activity
     pub start: Option<i64>,
 }

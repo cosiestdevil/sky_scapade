@@ -6,14 +6,14 @@ use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use strum::{EnumCount, IntoEnumIterator};
 
-use crate::{upgrades, StatUpgrade, UpgradeLevel, UpgradeType};
+use crate::upgrades::*;
 
 #[derive(Resource, Clone)]
 pub struct Generator {
     seed: [u8; 32],
     height_generator: cosiest_noisiest::NoiseGenerator<f64>,
     hole_generator: cosiest_noisiest::NoiseGenerator<f64>,
-    upgrades: upgrades::WeightedUpgrades<ChaCha20Rng, UpgradeType>,
+    upgrades: WeightedUpgrades<ChaCha20Rng, UpgradeType>,
 }
 
 pub struct NoiseSettings {
@@ -86,13 +86,13 @@ impl Generator {
                 hole_noise_settings.amplitude,
                 hole_noise_settings.octaves,
             ),
-            upgrades: upgrades::WeightedUpgrades::new(upgrade_rng),
+            upgrades: WeightedUpgrades::new(upgrade_rng),
         };
 
         let weight_offset = 0.2;
         let mut weight = 50_000_000.;
-        for (i, upgrade_level) in crate::UpgradeLevel::iter().enumerate() {
-            if upgrade_level == crate::UpgradeLevel::None {
+        for (i, upgrade_level) in crate::upgrades::UpgradeLevel::iter().enumerate() {
+            if upgrade_level == crate::upgrades::UpgradeLevel::None {
                 continue;
             }
             result.upgrades.add_upgrade(
@@ -114,7 +114,7 @@ impl Generator {
             if upgrade_level != UpgradeLevel::Basic {
                 if i % (UpgradeLevel::COUNT / 4) == 0 {
                     result.upgrades.add_upgrade(
-                        UpgradeType::GlideSkill(crate::GlideSkill {
+                        UpgradeType::GlideSkill(crate::upgrades::GlideSkill {
                             max_uses: 1 + (i / 4) as u8,
                             tier: upgrade_level,
                             cooldown: Duration::from_secs(10),
@@ -125,7 +125,7 @@ impl Generator {
                 }
                 if i % (UpgradeLevel::COUNT / 3) == 0 {
                     result.upgrades.add_upgrade(
-                        UpgradeType::JumpSkill(crate::JumpSkill {
+                        UpgradeType::JumpSkill(crate::upgrades::JumpSkill {
                             max_jumps: 1 + (i / 3) as u8,
                             tier: upgrade_level,
                             air: true,
@@ -135,7 +135,7 @@ impl Generator {
                 }
                 if i % 2 == 0 {
                     result.upgrades.add_upgrade(
-                        UpgradeType::DashSkill(crate::DashSkill {
+                        UpgradeType::DashSkill(crate::upgrades::DashSkill {
                             max_dash: 1 + (i / 4) as u8,
                             tier: upgrade_level,
                             air: upgrade_level > UpgradeLevel::Advanced,

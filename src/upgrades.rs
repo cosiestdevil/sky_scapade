@@ -1,8 +1,10 @@
 use core::panic;
+use std::time::Duration;
 
 use bevy::log::info;
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
+use strum::{EnumCount, EnumIter};
 use std::fmt::Debug;
 
 #[derive(Clone)]
@@ -48,6 +50,85 @@ impl<R: Rng + Sized, T: Upgrade<T>+Debug> WeightedUpgrades<R, T> {
 
 pub trait Upgrade<T: Upgrade<T>>: Copy + Clone {
     fn is_lower(&self, other: T) -> bool;
+}
+#[derive(Debug, Copy, Clone)]
+pub enum UpgradeType {
+    Speed(StatUpgrade),
+    JumpPower(StatUpgrade),
+    JumpSkill(JumpSkill),
+    DashSkill(DashSkill),
+    GlideSkill(GlideSkill),
+}
+
+#[derive(EnumIter, EnumCount, Debug, PartialEq, Copy, Clone, PartialOrd, Default)]
+pub enum UpgradeLevel {
+    #[default]
+    None,
+    Basic,
+    Improved,
+    Enhanced,
+    Advanced,
+    Superior,
+    Elite,
+    Master,
+    Epic,
+    Legendary,
+    Mythic,
+}
+#[derive(Debug, Copy, Clone, Default)]
+pub struct JumpSkill {
+    pub max_jumps: u8,
+    pub tier: UpgradeLevel,
+    pub air: bool,
+}
+#[derive(Debug, Copy, Clone, Default)]
+pub struct DashSkill {
+    pub max_dash: u8,
+    pub air: bool,
+    pub cooldown: Duration,
+    pub tier: UpgradeLevel,
+}
+
+#[derive(Debug, Copy, Clone, Default)]
+pub struct GlideSkill {
+    pub max_uses: u8,
+    pub cooldown: Duration,
+    pub tier: UpgradeLevel,
+    pub max_duration: Duration,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct StatUpgrade {
+    pub modifier: f32,
+    pub additive: bool,
+    pub tier: UpgradeLevel,
+}
+
+impl Upgrade<UpgradeType> for UpgradeType {
+    fn is_lower(&self, other: UpgradeType) -> bool {
+        match self {
+            UpgradeType::Speed(me) => match other {
+                UpgradeType::Speed(other) => me.tier <= other.tier,
+                _ => false,
+            },
+            UpgradeType::JumpPower(me) => match other {
+                UpgradeType::JumpPower(other) => me.tier <= other.tier,
+                _ => false,
+            },
+            UpgradeType::JumpSkill(me) => match other {
+                UpgradeType::JumpSkill(other) => me.tier <= other.tier,
+                _ => false,
+            },
+            UpgradeType::DashSkill(me) => match other {
+                UpgradeType::DashSkill(other) => me.tier <= other.tier,
+                _ => false,
+            },
+            UpgradeType::GlideSkill(me) => match other {
+                UpgradeType::GlideSkill(other) => me.tier <= other.tier,
+                _ => false,
+            },
+        }
+    }
 }
 
 

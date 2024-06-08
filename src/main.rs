@@ -29,7 +29,7 @@ use bevy_tnua::{
     TnuaAction,
 };
 use bevy_tnua_rapier3d::{TnuaRapier3dIOBundle, TnuaRapier3dPlugin, TnuaRapier3dSensorShape};
-use input::Player;
+
 use leafwing_input_manager::{
     action_state::ActionState, axislike::DualAxis, input_map::InputMap, plugin::InputManagerPlugin,
     InputManagerBundle,
@@ -38,7 +38,6 @@ use std::{
     str::from_utf8,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use strum::{EnumCount, EnumIter};
 mod discord;
 mod generate;
 mod input;
@@ -46,6 +45,8 @@ mod menu;
 mod settings;
 mod system_info;
 mod upgrades;
+use crate::upgrades::*;
+use crate::input::Player;
 const GAME_NAME: &str = "SkyScapade";
 fn main() {
     let mut app = App::new();
@@ -291,84 +292,7 @@ fn level_upgrade(
         }
     }
 }
-#[derive(Debug, Copy, Clone)]
-enum UpgradeType {
-    Speed(StatUpgrade),
-    JumpPower(StatUpgrade),
-    JumpSkill(JumpSkill),
-    DashSkill(DashSkill),
-    GlideSkill(GlideSkill),
-}
-#[derive(EnumIter, EnumCount, Debug, PartialEq, Copy, Clone, PartialOrd, Default)]
-enum UpgradeLevel {
-    #[default]
-    None,
-    Basic,
-    Improved,
-    Enhanced,
-    Advanced,
-    Superior,
-    Elite,
-    Master,
-    Epic,
-    Legendary,
-    Mythic,
-}
-#[derive(Debug, Copy, Clone, Default)]
-struct JumpSkill {
-    max_jumps: u8,
-    tier: UpgradeLevel,
-    air: bool,
-}
-#[derive(Debug, Copy, Clone, Default)]
-struct DashSkill {
-    max_dash: u8,
-    air: bool,
-    cooldown: Duration,
-    tier: UpgradeLevel,
-}
 
-#[derive(Debug, Copy, Clone, Default)]
-struct GlideSkill {
-    max_uses: u8,
-    cooldown: Duration,
-    tier: UpgradeLevel,
-    max_duration: Duration,
-}
-
-#[derive(Debug, Copy, Clone)]
-struct StatUpgrade {
-    modifier: f32,
-    additive: bool,
-    tier: UpgradeLevel,
-}
-
-impl upgrades::Upgrade<UpgradeType> for UpgradeType {
-    fn is_lower(&self, other: UpgradeType) -> bool {
-        match self {
-            UpgradeType::Speed(me) => match other {
-                UpgradeType::Speed(other) => me.tier <= other.tier,
-                _ => false,
-            },
-            UpgradeType::JumpPower(me) => match other {
-                UpgradeType::JumpPower(other) => me.tier <= other.tier,
-                _ => false,
-            },
-            UpgradeType::JumpSkill(me) => match other {
-                UpgradeType::JumpSkill(other) => me.tier <= other.tier,
-                _ => false,
-            },
-            UpgradeType::DashSkill(me) => match other {
-                UpgradeType::DashSkill(other) => me.tier <= other.tier,
-                _ => false,
-            },
-            UpgradeType::GlideSkill(me) => match other {
-                UpgradeType::GlideSkill(other) => me.tier <= other.tier,
-                _ => false,
-            },
-        }
-    }
-}
 
 #[derive(Component)]
 struct Score;
