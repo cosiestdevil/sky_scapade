@@ -23,7 +23,7 @@ use bevy_mod_taa::TAABundle;
 use bevy_obj::ObjPlugin;
 use bevy_rapier3d::prelude::*;
 use bevy_tnua::{
-    builtins::{TnuaBuiltinDash, TnuaBuiltinJump, TnuaBuiltinWalk},
+    builtins::{TnuaBuiltinJump, TnuaBuiltinWalk},
     control_helpers::TnuaSimpleAirActionsCounter,
     controller::{TnuaController, TnuaControllerBundle, TnuaControllerPlugin},
     TnuaAction,
@@ -45,6 +45,7 @@ mod menu;
 mod settings;
 mod system_info;
 mod upgrades;
+mod skills;
 use crate::upgrades::*;
 use crate::input::Player;
 const GAME_NAME: &str = "SkyScapade";
@@ -106,6 +107,7 @@ fn main() {
         (move_player, move_camera_based_on_speed)
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
+    app.add_plugins(skills::SkillPlugin);
     app.add_systems(
         FixedUpdate,
         (
@@ -115,7 +117,6 @@ fn main() {
             killing_floor,
             update_score,
             update_player_position_display,
-            dash_cooldown,
             glide_cooldown,
             jump_skill_display,
             dash_skill_display,
@@ -374,21 +375,7 @@ fn generate_more_if_needed(
         info!("level.right: {}", level.right);
     }
 }
-fn dash_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
-    let mut player = player.single_mut();
-    if let Some(ref mut cooldown) = player.dash_cooldown {
-        cooldown.tick(time.delta());
-        if cooldown.just_finished() {
-            player.used_dashes -= 1;
-            if player.used_dashes == 0 {
-                player.dash_cooldown = None;
-            } else {
-                player.dash_cooldown =
-                    Some(Timer::new(player.dash_skill.cooldown, TimerMode::Once));
-            }
-        }
-    }
-}
+
 fn glide_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
     let mut player = player.single_mut();
     if let Some(ref mut cooldown) = player.glide_cooldown {
@@ -447,25 +434,6 @@ fn move_player(
         float_height: 2.,
         ..Default::default()
     });
-
-    if (!controller.is_airborne().unwrap() || player.dash_skill.air)
-        && player.dash_skill.max_dash > player.used_dashes
-        && action_state.just_pressed(&input::Action::Dash)
-    {
-        //if action_state.just_pressed(&input::Action::Dash) && player.dash_skill.max_dash > player.used_dashes && !(!player.dash_skill.air && controller.is_airborne().unwrap()) {
-        if player.dash_cooldown.is_none() {
-            player.dash_cooldown = Some(Timer::new(player.dash_skill.cooldown, TimerMode::Once));
-        }
-
-        player.used_dashes += 1;
-        controller.action(TnuaBuiltinDash {
-            displacement: direction.normalize_or_zero() * player.max_speed() * 0.75,
-            speed: player.max_speed() * 3.,
-            allow_in_air: player.dash_skill.air,
-            brake_to_speed: player.max_speed(),
-            ..default()
-        });
-    }
     if controller.is_airborne().unwrap()
         && action_state.pressed(&input::Action::Glide)
         && (match &player.glide_timer {
