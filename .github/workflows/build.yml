@@ -10,14 +10,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest,macos-latest]
-    runs-on:
-      ${{ matrix.os }}
+  Ubuntu:
+    runs-on: 'ubuntu-latest'
     steps:
     - uses: actions/checkout@v4
+    - name: Install Deps
+      run: sudo apt-get install g++ pkg-config libx11-dev libasound2-dev libudev-dev libxkbcommon-x11-0
     - name: Build
       run: cargo build --verbose
     - name: Run tests
