@@ -12,6 +12,8 @@ pub enum Action {
     Dash,
     Glide,
     Accept,
+    Pause,
+    Resume,
 }
 #[derive(Component,Default)]
 pub struct Player{

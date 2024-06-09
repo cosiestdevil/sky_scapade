@@ -107,6 +107,7 @@ fn main() {
             move_player,
             move_camera_based_on_speed,
             upgrade_notification_timers,
+            pause_button
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
@@ -135,7 +136,7 @@ fn main() {
         OnEnter(InGameState::Paused),
         (pause_level, show_pause_screen),
     );
-    app.add_systems(Update, (pause_screen_interaction).run_if(in_state(InGameState::Paused)));
+    app.add_systems(Update, (pause_screen_interaction,resume_button).run_if(in_state(InGameState::Paused)));
     app.add_systems(OnExit(InGameState::Paused), (resume_level,hide_pause_screen));
     app.add_systems(OnEnter(InGameState::Upgrade), pause_level);
     app.add_systems(OnExit(InGameState::Upgrade), resume_level);
@@ -603,6 +604,24 @@ fn glide_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
 #[derive(Component)]
 struct Glider;
 
+fn pause_button(mut query: Query<
+    &ActionState<input::Action>,
+>,mut next_state: ResMut<NextState<InGameState>>,){
+    let action_state = query.single();
+    if action_state.just_pressed(&input::Action::Pause){
+        next_state.set(InGameState::Paused);
+    }
+}
+
+fn resume_button(mut query: Query<
+    &ActionState<input::Action>,
+>,mut next_state: ResMut<NextState<InGameState>>,){
+    let action_state = query.single();
+    if action_state.just_pressed(&input::Action::Resume){
+        next_state.set(InGameState::Playing);
+    }
+}
+
 fn move_player(
     mut commands: Commands,
     mut query: Query<(
@@ -1018,6 +1037,11 @@ fn start_level(
     input_map.insert(input::Action::Accept, GamepadButtonType::South);
     input_map.insert(input::Action::Glide, KeyCode::KeyW);
     input_map.insert(input::Action::Glide, GamepadButtonType::North);
+    input_map.insert(input::Action::Pause, KeyCode::Escape);
+    input_map.insert(input::Action::Pause, GamepadButtonType::Start);
+    input_map.insert(input::Action::Resume, KeyCode::Escape);
+    input_map.insert(input::Action::Resume, GamepadButtonType::Start);
+    input_map.insert(input::Action::Resume, GamepadButtonType::East);
 
     let player_mesh = meshes.add(Capsule3d::new(0.4, 2.));
     let player = commands
@@ -1290,8 +1314,8 @@ fn temp(
 ) {
     if input.just_pressed(KeyCode::Escape) {
         match state.get() {
-            InGameState::Playing => next_state.set(InGameState::Paused),
-            InGameState::Paused => next_state.set(InGameState::Playing),
+            InGameState::Playing => {},
+            InGameState::Paused => {},
             InGameState::Upgrade => {}
             InGameState::End => {
                 next_state.set(InGameState::None);
