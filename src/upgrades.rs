@@ -180,6 +180,9 @@ mod tests {
         for upgrade_type in UpgradeType::iter() {
             let mut weight = base_weight;
             for upgrade_level in UpgradeLevel::iter() {
+                if upgrade_level== UpgradeLevel::None{
+                    continue;
+                }
                 weighted_upgrades.add_upgrade(
                     Upgrade {
                         upgrade_level,
