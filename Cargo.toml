@@ -3,6 +3,7 @@ name = "sky_scapade"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -32,7 +33,9 @@ serde = { version = "1", features = ["derive"] }
 dirs = "5.0"
 discord-rich-presence = "0.2"
 toml = "0.8"
-dotenvy_macro = "0.15.7"
+
+[build-dependencies]
+dotenvy = "0.15.7"
 
 [features]
 #default= ["bevy_mod_taa"]

@@ -1,13 +1,12 @@
 use bevy::prelude::*;
 use discord_rich_presence::{activity::{self, Timestamps}, DiscordIpc, DiscordIpcClient};
-use dotenvy_macro::dotenv;
 pub struct DiscordPlugin;
 #[derive(Resource, Deref, DerefMut)]
 pub struct DiscordClient(Option<DiscordIpcClient>);
 
 impl Plugin for DiscordPlugin {
     fn build(&self, app: &mut App) {
-        let client = DiscordIpcClient::new(dotenv!("DISCORD_CLIENT_ID")).unwrap();
+        let client = DiscordIpcClient::new(env!("DISCORD_CLIENT_ID")).unwrap();
         app.init_resource::<ActivityState>();
         app.insert_resource(DiscordClient(Some(client)));
         app.add_systems(Startup, startup_client);
