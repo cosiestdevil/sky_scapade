@@ -11,7 +11,7 @@ use bevy::{
         render_asset::RenderAssetUsages,
         render_resource::{
             Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
-        }
+        },
     },
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
@@ -131,8 +131,12 @@ fn main() {
         Update,
         (accept_upgrade).run_if(in_state(InGameState::Upgrade)),
     );
-    app.add_systems(OnEnter(InGameState::Paused), pause_level);
-    app.add_systems(OnExit(InGameState::Paused), resume_level);
+    app.add_systems(
+        OnEnter(InGameState::Paused),
+        (pause_level, show_pause_screen),
+    );
+    app.add_systems(Update, (pause_screen_interaction).run_if(in_state(InGameState::Paused)));
+    app.add_systems(OnExit(InGameState::Paused), (resume_level,hide_pause_screen));
     app.add_systems(OnEnter(InGameState::Upgrade), pause_level);
     app.add_systems(OnExit(InGameState::Upgrade), resume_level);
     app.add_systems(OnEnter(InGameState::End), pause_level);
@@ -145,7 +149,143 @@ struct PlatformAssets {
     mesh: Handle<Mesh>,
     material: Handle<StandardMaterial>,
 }
+#[derive(Component)]
+struct PauseScreen;
 
+enum PauseScreenButton{
+    ResumeGame,
+    ExitGame
+}
+
+#[derive(Component)]
+struct PauseScreenButtonComponent(PauseScreenButton);
+
+fn pause_screen_interaction(query:Query<(&Interaction,&PauseScreenButtonComponent),(Changed<Interaction>, With<Button>)>,mut next_state: ResMut<NextState<InGameState>>,
+mut next_app: ResMut<NextState<AppState>>,){
+    for (interaction,button) in query.iter(){
+        match *interaction {
+            Interaction::Pressed => {
+                match button.0{
+                    PauseScreenButton::ResumeGame => {
+                        next_state.set(InGameState::Playing);
+                    },
+                    PauseScreenButton::ExitGame => {
+                        next_app.set(AppState::MainMenu);
+                        next_state.set(InGameState::None);
+                    },
+                }
+            },
+            Interaction::Hovered => {},
+            Interaction::None => {},
+        }
+    }
+}
+
+fn show_pause_screen(
+    mut commands: Commands,
+    safe_ui: Query<Entity, With<crate::SafeUi>>,
+    mut player: Query<&mut Player>,
+    mut generator: ResMut<generate::Generator>,
+) {
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.),
+                height: Val::Percent(100.),
+                ..default()
+            },
+            background_color: Color::rgba(0., 0., 0., 0.7).into(),
+            ..default()
+        })
+        .insert(PauseScreen);
+    if let player = player.single() {
+        let safe_ui = safe_ui.get_single();
+        if let Ok(safe_ui) = safe_ui {
+            let mut safe_ui = commands.entity(safe_ui);
+            safe_ui.with_children(|safe_ui| {
+                safe_ui
+                    .spawn(NodeBundle {
+                        style: Style {
+                            position_type: PositionType::Absolute,
+                            width: Val::Percent(100.),
+                            height: Val::Percent(100.),
+                            display: Display::Grid,
+                            grid_template_columns: vec![GridTrack::auto(), GridTrack::fr(1.0)],
+
+                            ..default()
+                        },
+                        z_index: ZIndex::Global(10),
+                        ..default()
+                    })
+                    .insert(PauseScreen)
+                    .with_children(|pause_screen| {
+                        pause_screen
+                            .spawn(crate::menu::get_main_menu_menu_bundle())
+                            .with_children(|parent| {
+                                parent.new_menu_button("Resume", PauseScreenButtonComponent(PauseScreenButton::ResumeGame));
+                                parent.new_menu_button("Quite", PauseScreenButtonComponent(PauseScreenButton::ExitGame));
+                            });
+                        pause_screen
+                            .spawn(NodeBundle {
+                                style: Style {
+                                    display: Display::Flex,
+                                    ..default()
+                                },
+                                ..default()
+                            })
+                            .with_children(|skill_list| {
+                                if player.jump_skill.tier > UpgradeLevel::None {
+                                    skill_list
+                                        .spawn(NodeBundle {
+                                            style: Style {
+                                                display: Display::Flex,
+                                                flex_direction: FlexDirection::Column,
+                                                border: UiRect::all(Val::Px(2.)),
+                                                padding: UiRect::all(Val::Px(5.)),
+                                                ..default()
+                                            },
+                                            border_color: player.jump_skill.tier.color().into(),
+                                            ..default()
+                                        })
+                                        .with_children(|jump_skill| {
+                                            jump_skill.spawn(NodeBundle::default()).with_children(
+                                                |title| {
+                                                    title.spawn(TextBundle::from_section(
+                                                        "Jump Skill",
+                                                        TextStyle {
+                                                            font_size: 24.,
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
+                                            jump_skill.spawn(NodeBundle::default()).with_children(
+                                                |tier| {
+                                                    tier.spawn(TextBundle::from_section(
+                                                        player.jump_skill.tier.name(),
+                                                        TextStyle {
+                                                            font_size: 22.,
+                                                            color: player.jump_skill.tier.color(),
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
+                                        });
+                                }
+                            });
+                    });
+            });
+        }
+    }
+}
+fn hide_pause_screen(mut commands: Commands, pause_screens: Query<Entity, With<PauseScreen>>) {
+    for pause_screen in pause_screens.iter() {
+        let mut pause_screen = commands.entity(pause_screen);
+        pause_screen.despawn_recursive();
+    }
+}
 fn pause_level(mut physics: ResMut<RapierConfiguration>) {
     physics.physics_pipeline_active = false;
 }
@@ -308,7 +448,7 @@ fn level_upgrade(
                     ..default()
                 },
             });
-            
+
             let safe_ui = safe_ui.get_single();
             if let Ok(safe_ui) = safe_ui {
                 let mut safe_ui = commands.entity(safe_ui);
@@ -336,10 +476,10 @@ fn level_upgrade(
                                     max_width: Val::Percent(100.),
                                     height: Val::Percent(100.),
                                     border: UiRect::all(Val::Px(5.)),
-                                    padding:UiRect::all(Val::Px(5.)),
+                                    padding: UiRect::all(Val::Px(5.)),
                                     ..default()
                                 },
-                                border_color:upgrade.color().into(),
+                                border_color: upgrade.color().into(),
                                 background_color: Color::rgba(0., 0., 0., 0.6).into(),
                                 ..default()
                             })

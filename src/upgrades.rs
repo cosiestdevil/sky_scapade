@@ -94,6 +94,21 @@ impl UpgradeLevel{
             UpgradeLevel::Mythic => Color::RED,
         }
     }
+    pub fn name(&self) -> String{
+        match self {
+            UpgradeLevel::None =>"None",
+            UpgradeLevel::Basic => "Basic",
+            UpgradeLevel::Improved => "Improved",
+            UpgradeLevel::Enhanced => "Enhanced",
+            UpgradeLevel::Advanced => "Advanced",
+            UpgradeLevel::Superior => "Suprerior",
+            UpgradeLevel::Elite => "Elite",
+            UpgradeLevel::Master => "Master",
+            UpgradeLevel::Epic => "Epic",
+            UpgradeLevel::Legendary => "Legendary",
+            UpgradeLevel::Mythic => "Mythic",
+        }.into()
+    }
 }
 #[derive(Debug, Copy, Clone, Default)]
 pub struct JumpSkill {

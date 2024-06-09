@@ -208,7 +208,7 @@ fn main_menu_button_system(
     }
 }
 
-fn get_main_menu_menu_bundle() -> NodeBundle {
+pub fn get_main_menu_menu_bundle() -> NodeBundle {
     NodeBundle {
         style: Style {
             display: Display::Grid,
