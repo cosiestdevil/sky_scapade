@@ -32,6 +32,7 @@ serde = { version = "1", features = ["derive"] }
 dirs = "5.0"
 discord-rich-presence = "0.2"
 toml = "0.8"
+dotenvy_macro = "0.15.7"
 
 [features]
 #default= ["bevy_mod_taa"]
