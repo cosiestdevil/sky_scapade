@@ -1,5 +1,5 @@
 use core::panic;
-use std::time::Duration;
+use std::{fmt::format, time::Duration};
 
 use bevy::{log::info, render::color::Color};
 use rand::distributions::WeightedIndex;
@@ -52,6 +52,12 @@ pub trait Upgrade<T: Upgrade<T>>: Copy + Clone {
     fn is_lower(&self, other: T) -> bool;
     fn tier(&self)->UpgradeLevel;
     fn color(&self) -> Color;
+    fn description(&self)->String;
+}
+
+pub trait PauseScreenUpgrade{
+    fn name(&self)->String;
+    fn description(&self)->String;
 }
 #[derive(Debug, Copy, Clone)]
 pub enum UpgradeType {
@@ -116,12 +122,31 @@ pub struct JumpSkill {
     pub tier: UpgradeLevel,
     pub air: bool,
 }
+impl PauseScreenUpgrade for JumpSkill {
+    fn name(&self)->String {
+        "Jump".into()
+    }
+    fn description(&self) -> String {
+        format!("Jumps x {}",self.max_jumps)
+    }
+}
 #[derive(Debug, Copy, Clone, Default)]
 pub struct DashSkill {
     pub max_dash: u8,
     pub air: bool,
     pub cooldown: Duration,
     pub tier: UpgradeLevel,
+}
+impl PauseScreenUpgrade for DashSkill {
+    fn description(&self) -> String {
+        if self.air { format!("Air/Ground Dash x {}", self.max_dash)}else{
+            format!("Ground Dash x {}", self.max_dash)
+        }
+    }
+    
+    fn name(&self)->String {
+        "Dash".into()
+    }
 }
 
 #[derive(Debug, Copy, Clone, Default)]
@@ -131,12 +156,35 @@ pub struct GlideSkill {
     pub tier: UpgradeLevel,
     pub max_duration: Duration,
 }
+impl PauseScreenUpgrade for GlideSkill {
+    fn description(&self) -> String {
+        format!("Glide x {}", self.max_uses)
+    }
+    
+    fn name(&self)->String {
+        "Glide".into()
+    }
+}
 
 #[derive(Debug, Copy, Clone)]
 pub struct StatUpgrade {
+    pub stat:&'static str,
     pub modifier: f32,
     pub additive: bool,
     pub tier: UpgradeLevel,
+}
+impl PauseScreenUpgrade for StatUpgrade {
+    fn description(&self) -> String {
+        if self.additive{
+            format!("Increased {} by {}%",self.stat,self.modifier*100.)
+        }else{
+            format!("Increased {} by {}",self.stat,self.modifier)
+        }
+    }
+    
+    fn name(&self)->String {
+        self.stat.into()
+    }
 }
 
 impl Upgrade<UpgradeType> for UpgradeType {
@@ -176,6 +224,16 @@ impl Upgrade<UpgradeType> for UpgradeType {
             UpgradeType::JumpSkill(jump) => jump.tier,
             UpgradeType::DashSkill(dash) => dash.tier,
             UpgradeType::GlideSkill(glide) => glide.tier,
+        }
+    }
+    
+    fn description(&self)->String {
+        match self{
+            UpgradeType::Speed(speed) =>speed.description(),
+            UpgradeType::JumpPower(jump) => jump.description(),
+            UpgradeType::JumpSkill(jump) => jump.description(),
+            UpgradeType::DashSkill(dash) => dash.description(),
+            UpgradeType::GlideSkill(glide) => glide.description(),
         }
     }
     
@@ -268,6 +326,10 @@ mod tests {
         
         fn color(&self) -> Color {
             Color::WHITE
+        }
+        
+        fn description(&self)->String {
+            "TEST".into()
         }
     }
 }

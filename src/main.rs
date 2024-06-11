@@ -212,7 +212,7 @@ fn show_pause_screen(
                             width: Val::Percent(100.),
                             height: Val::Percent(100.),
                             display: Display::Grid,
-                            grid_template_columns: vec![GridTrack::auto(), GridTrack::fr(1.0)],
+                            grid_template_columns: vec![GridTrack::auto(), GridTrack::auto(),GridTrack::fr(1.)],
 
                             ..default()
                         },
@@ -225,18 +225,19 @@ fn show_pause_screen(
                             .spawn(crate::menu::get_main_menu_menu_bundle())
                             .with_children(|parent| {
                                 parent.new_menu_button("Resume", PauseScreenButtonComponent(PauseScreenButton::ResumeGame));
-                                parent.new_menu_button("Quite", PauseScreenButtonComponent(PauseScreenButton::ExitGame));
+                                parent.new_menu_button("Quit", PauseScreenButtonComponent(PauseScreenButton::ExitGame));
                             });
                         pause_screen
                             .spawn(NodeBundle {
                                 style: Style {
                                     display: Display::Flex,
+                                    flex_direction:FlexDirection::Column,
                                     ..default()
                                 },
                                 ..default()
                             })
                             .with_children(|skill_list| {
-                                if player.jump_skill.tier > UpgradeLevel::None {
+                                if player.jump_skill.tier >= UpgradeLevel::None {
                                     skill_list
                                         .spawn(NodeBundle {
                                             style: Style {
@@ -246,6 +247,7 @@ fn show_pause_screen(
                                                 padding: UiRect::all(Val::Px(5.)),
                                                 ..default()
                                             },
+                                            background_color: Color::BLACK.into(),
                                             border_color: player.jump_skill.tier.color().into(),
                                             ..default()
                                         })
@@ -253,7 +255,7 @@ fn show_pause_screen(
                                             jump_skill.spawn(NodeBundle::default()).with_children(
                                                 |title| {
                                                     title.spawn(TextBundle::from_section(
-                                                        "Jump Skill",
+                                                        player.jump_skill.name(),
                                                         TextStyle {
                                                             font_size: 24.,
                                                             ..default()
@@ -273,8 +275,122 @@ fn show_pause_screen(
                                                     ));
                                                 },
                                             );
+                                            jump_skill.spawn(NodeBundle::default()).with_children(
+                                                |tier| {
+                                                    tier.spawn(TextBundle::from_section(
+                                                        player.jump_skill.description(),
+                                                        TextStyle {
+                                                            font_size: 22.,
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
                                         });
                                 }
+                                if player.dash_skill.tier > UpgradeLevel::None {
+                                    skill_list
+                                        .spawn(NodeBundle {
+                                            style: Style {
+                                                display: Display::Flex,
+                                                flex_direction: FlexDirection::Column,
+                                                border: UiRect::all(Val::Px(2.)),
+                                                padding: UiRect::all(Val::Px(5.)),
+                                                ..default()
+                                            },
+                                            background_color: Color::BLACK.into(),
+                                            border_color: player.dash_skill.tier.color().into(),
+                                            ..default()
+                                        })
+                                        .with_children(|dash_skill| {
+                                            dash_skill.spawn(NodeBundle::default()).with_children(
+                                                |title| {
+                                                    title.spawn(TextBundle::from_section(
+                                                        player.dash_skill.name(),
+                                                        TextStyle {
+                                                            font_size: 24.,
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
+                                            dash_skill.spawn(NodeBundle::default()).with_children(
+                                                |tier| {
+                                                    tier.spawn(TextBundle::from_section(
+                                                        player.dash_skill.tier.name(),
+                                                        TextStyle {
+                                                            font_size: 22.,
+                                                            color: player.dash_skill.tier.color(),
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
+                                            dash_skill.spawn(NodeBundle::default()).with_children(
+                                                |tier| {
+                                                    tier.spawn(TextBundle::from_section(
+                                                        player.dash_skill.description(),
+                                                        TextStyle {
+                                                            font_size: 22.,
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
+                                        });
+                                }
+                                if player.glide_skill.tier > UpgradeLevel::None {
+                                    skill_list
+                                        .spawn(NodeBundle {
+                                            style: Style {
+                                                display: Display::Flex,
+                                                flex_direction: FlexDirection::Column,
+                                                border: UiRect::all(Val::Px(2.)),
+                                                padding: UiRect::all(Val::Px(5.)),
+                                                ..default()
+                                            },
+                                            border_color: player.glide_skill.tier.color().into(),
+                                            background_color: Color::BLACK.into(),
+                                            ..default()
+                                        })
+                                        .with_children(|glide_skill| {
+                                            glide_skill.spawn(NodeBundle::default()).with_children(
+                                                |title| {
+                                                    title.spawn(TextBundle::from_section(
+                                                        player.glide_skill.name(),
+                                                        TextStyle {
+                                                            font_size: 24.,
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
+                                            glide_skill.spawn(NodeBundle::default()).with_children(
+                                                |tier| {
+                                                    tier.spawn(TextBundle::from_section(
+                                                        player.glide_skill.tier.name(),
+                                                        TextStyle {
+                                                            font_size: 22.,
+                                                            color: player.glide_skill.tier.color(),
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
+                                            glide_skill.spawn(NodeBundle::default()).with_children(
+                                                |tier| {
+                                                    tier.spawn(TextBundle::from_section(
+                                                        player.glide_skill.description(),
+                                                        TextStyle {
+                                                            font_size: 22.,
+                                                            ..default()
+                                                        },
+                                                    ));
+                                                },
+                                            );
+                                        });
+                                }
+                            
                             });
                     });
             });

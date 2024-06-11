@@ -97,6 +97,7 @@ impl Generator {
             }
             result.upgrades.add_upgrade(
                 UpgradeType::Speed(StatUpgrade {
+                    stat:"Movement Speed",
                     modifier: 1. + (0.1 * (i as f32)),
                     additive: false,
                     tier: upgrade_level,
@@ -105,6 +106,7 @@ impl Generator {
             );
             result.upgrades.add_upgrade(
                 UpgradeType::JumpPower(StatUpgrade {
+                    stat:"Jump Height",
                     modifier: 0.5 * (i as f32),
                     additive: true,
                     tier: upgrade_level,
