@@ -28,6 +28,10 @@ fn dash(mut query: Query<(&ActionState<Action>, &mut TnuaController, &mut Player
         if let Some(walk) = basis {
             player.used_dashes += 1;
             let direction = walk.0.desired_forward;
+            if player.dash_cooldown.is_none() {
+                player.dash_cooldown = Some(Timer::new(player.dash_skill.cooldown, TimerMode::Once))
+            }
+
             controller.action(TnuaBuiltinDash {
                 displacement: direction.normalize_or_zero() * player.max_speed() * 0.75,
                 speed: player.max_speed() * 3.,
