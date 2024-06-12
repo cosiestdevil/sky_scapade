@@ -107,7 +107,7 @@ fn main() {
             move_player,
             move_camera_based_on_speed,
             upgrade_notification_timers,
-            pause_button
+            pause_button,
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
@@ -136,8 +136,14 @@ fn main() {
         OnEnter(InGameState::Paused),
         (pause_level, show_pause_screen),
     );
-    app.add_systems(Update, (pause_screen_interaction,resume_button).run_if(in_state(InGameState::Paused)));
-    app.add_systems(OnExit(InGameState::Paused), (resume_level,hide_pause_screen));
+    app.add_systems(
+        Update,
+        (pause_screen_interaction, resume_button).run_if(in_state(InGameState::Paused)),
+    );
+    app.add_systems(
+        OnExit(InGameState::Paused),
+        (resume_level, hide_pause_screen),
+    );
     app.add_systems(OnEnter(InGameState::Upgrade), pause_level);
     app.add_systems(OnExit(InGameState::Upgrade), resume_level);
     app.add_systems(OnEnter(InGameState::End), pause_level);
@@ -153,31 +159,32 @@ struct PlatformAssets {
 #[derive(Component)]
 struct PauseScreen;
 
-enum PauseScreenButton{
+enum PauseScreenButton {
     ResumeGame,
-    ExitGame
+    ExitGame,
 }
 
 #[derive(Component)]
 struct PauseScreenButtonComponent(PauseScreenButton);
 
-fn pause_screen_interaction(query:Query<(&Interaction,&PauseScreenButtonComponent),(Changed<Interaction>, With<Button>)>,mut next_state: ResMut<NextState<InGameState>>,
-mut next_app: ResMut<NextState<AppState>>,){
-    for (interaction,button) in query.iter(){
+fn pause_screen_interaction(
+    query: Query<(&Interaction, &PauseScreenButtonComponent), (Changed<Interaction>, With<Button>)>,
+    mut next_state: ResMut<NextState<InGameState>>,
+    mut next_app: ResMut<NextState<AppState>>,
+) {
+    for (interaction, button) in query.iter() {
         match *interaction {
-            Interaction::Pressed => {
-                match button.0{
-                    PauseScreenButton::ResumeGame => {
-                        next_state.set(InGameState::Playing);
-                    },
-                    PauseScreenButton::ExitGame => {
-                        next_app.set(AppState::MainMenu);
-                        next_state.set(InGameState::None);
-                    },
+            Interaction::Pressed => match button.0 {
+                PauseScreenButton::ResumeGame => {
+                    next_state.set(InGameState::Playing);
+                }
+                PauseScreenButton::ExitGame => {
+                    next_app.set(AppState::MainMenu);
+                    next_state.set(InGameState::None);
                 }
             },
-            Interaction::Hovered => {},
-            Interaction::None => {},
+            Interaction::Hovered => {}
+            Interaction::None => {}
         }
     }
 }
@@ -212,7 +219,12 @@ fn show_pause_screen(
                             width: Val::Percent(100.),
                             height: Val::Percent(100.),
                             display: Display::Grid,
-                            grid_template_columns: vec![GridTrack::auto(), GridTrack::auto(),GridTrack::fr(1.)],
+                            grid_template_columns: vec![
+                                GridTrack::auto(),
+                                GridTrack::auto(),
+                                GridTrack::auto(),
+                                GridTrack::fr(1.),
+                            ],
 
                             ..default()
                         },
@@ -224,14 +236,20 @@ fn show_pause_screen(
                         pause_screen
                             .spawn(crate::menu::get_main_menu_menu_bundle())
                             .with_children(|parent| {
-                                parent.new_menu_button("Resume", PauseScreenButtonComponent(PauseScreenButton::ResumeGame));
-                                parent.new_menu_button("Quit", PauseScreenButtonComponent(PauseScreenButton::ExitGame));
+                                parent.new_menu_button(
+                                    "Resume",
+                                    PauseScreenButtonComponent(PauseScreenButton::ResumeGame),
+                                );
+                                parent.new_menu_button(
+                                    "Quit",
+                                    PauseScreenButtonComponent(PauseScreenButton::ExitGame),
+                                );
                             });
                         pause_screen
                             .spawn(NodeBundle {
                                 style: Style {
                                     display: Display::Flex,
-                                    flex_direction:FlexDirection::Column,
+                                    flex_direction: FlexDirection::Column,
                                     ..default()
                                 },
                                 ..default()
@@ -390,7 +408,56 @@ fn show_pause_screen(
                                             );
                                         });
                                 }
-                            
+                            });
+                        pause_screen
+                            .spawn(NodeBundle {
+                                style: Style {
+                                    display: Display::Flex,
+                                    flex_direction: FlexDirection::Column,
+                                    ..default()
+                                },
+                                ..default()
+                            })
+                            .with_children(|stat_list| {
+                                stat_list
+                                    .spawn(NodeBundle {
+                                        style: Style {
+                                            padding: UiRect::all(Val::Px(5.)),
+                                            ..default()
+                                        },
+                                        background_color: Color::BLACK.into(),
+                                        ..default()
+                                    })
+                                    .with_children(|speed_stat| {
+                                        speed_stat.spawn(TextBundle::from_section(
+                                            format!(
+                                                "Max Speed: {}mph",
+                                                player.max_speed() * SPEED_DISPLAY
+                                            ),
+                                            TextStyle {
+                                                font_size: 22.,
+                                                ..default()
+                                            },
+                                        ));
+                                    });
+                                stat_list
+                                    .spawn(NodeBundle {
+                                        style: Style {
+                                            padding: UiRect::all(Val::Px(5.)),
+                                            ..default()
+                                        },
+                                        background_color: Color::BLACK.into(),
+                                        ..default()
+                                    })
+                                    .with_children(|jump_stat| {
+                                        jump_stat.spawn(TextBundle::from_section(
+                                            format!("Jump Power: {}", player.jump_power()),
+                                            TextStyle {
+                                                font_size: 22.,
+                                                ..default()
+                                            },
+                                        ));
+                                    });
                             });
                     });
             });
@@ -651,13 +718,13 @@ fn update_player_position_display(
             player_transform.translation.x,
             player_transform.translation.y,
             player_transform.translation.z,
-            velocity.linvel.x * 0.681818,
-            velocity.linvel.y * 0.681818,
-            velocity.linvel.z * 0.681818
+            velocity.linvel.x * SPEED_DISPLAY,
+            velocity.linvel.y * SPEED_DISPLAY,
+            velocity.linvel.z * SPEED_DISPLAY
         );
     }
 }
-
+const SPEED_DISPLAY: f32 = 0.681818;
 fn generate_more_if_needed(
     mut commands: Commands,
     mut level: Query<(Entity, &mut crate::Level)>,
@@ -720,20 +787,22 @@ fn glide_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
 #[derive(Component)]
 struct Glider;
 
-fn pause_button(mut query: Query<
-    &ActionState<input::Action>,
->,mut next_state: ResMut<NextState<InGameState>>,){
+fn pause_button(
+    mut query: Query<&ActionState<input::Action>>,
+    mut next_state: ResMut<NextState<InGameState>>,
+) {
     let action_state = query.single();
-    if action_state.just_pressed(&input::Action::Pause){
+    if action_state.just_pressed(&input::Action::Pause) {
         next_state.set(InGameState::Paused);
     }
 }
 
-fn resume_button(mut query: Query<
-    &ActionState<input::Action>,
->,mut next_state: ResMut<NextState<InGameState>>,){
+fn resume_button(
+    mut query: Query<&ActionState<input::Action>>,
+    mut next_state: ResMut<NextState<InGameState>>,
+) {
     let action_state = query.single();
-    if action_state.just_pressed(&input::Action::Resume){
+    if action_state.just_pressed(&input::Action::Resume) {
         next_state.set(InGameState::Playing);
     }
 }
@@ -1430,8 +1499,8 @@ fn temp(
 ) {
     if input.just_pressed(KeyCode::Escape) {
         match state.get() {
-            InGameState::Playing => {},
-            InGameState::Paused => {},
+            InGameState::Playing => {}
+            InGameState::Paused => {}
             InGameState::Upgrade => {}
             InGameState::End => {
                 next_state.set(InGameState::None);

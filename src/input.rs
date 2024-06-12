@@ -32,10 +32,12 @@ pub struct Player{
     pub glide_timer:Option<Timer>
     }
 impl Player{
-    pub fn max_speed(&mut self)->f32{
+    pub fn max_speed(&self)->f32{
         let mut result = self.base_speed;
-        self.speed_modifiers.sort_unstable_by(|a,b| a.additive.cmp(&b.additive));
-        for modifier in &self.speed_modifiers  {
+        let mut modifiers = self.speed_modifiers.clone();
+        modifiers.sort_unstable_by(|a,b| a.additive.cmp(&b.additive));
+        
+        for modifier in modifiers {
             if modifier.additive{
                 result += modifier.modifier;
             }else{
@@ -44,10 +46,11 @@ impl Player{
         }
         result
     }
-    pub fn jump_power(&mut self)->f32{
+    pub fn jump_power(&self)->f32{
         let mut result = self.base_jump_power;
-        self.jump_modifiers.sort_unstable_by(|a,b| a.additive.cmp(&b.additive));
-        for modifier in &self.jump_modifiers  {
+        let mut modifiers = self.jump_modifiers.clone();
+        modifiers.sort_unstable_by(|a,b| a.additive.cmp(&b.additive));
+        for modifier in modifiers  {
             if modifier.additive{
                 result += modifier.modifier;
             }else{
