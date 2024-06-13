@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![allow(clippy::type_complexity)]
 #[cfg(not(feature = "bevy_mod_taa"))]
 use bevy::core_pipeline::experimental::taa::TemporalAntiAliasBundle as TAABundle;
 use bevy::{
@@ -168,11 +169,22 @@ enum PauseScreenButton {
 struct PauseScreenButtonComponent(PauseScreenButton);
 
 fn pause_screen_interaction(
-    query: Query<(&Interaction, &PauseScreenButtonComponent), (Changed<Interaction>, With<Button>)>,
+    mut query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &Children,
+            &PauseScreenButtonComponent,
+        ),
+        (Changed<Interaction>, With<Button>),
+    >,
     mut next_state: ResMut<NextState<InGameState>>,
     mut next_app: ResMut<NextState<AppState>>,
+    mut text_query: Query<&mut Text>,
 ) {
-    for (interaction, button) in query.iter() {
+    for (interaction, mut color, mut border_color, children, button) in query.iter_mut() {
+        let mut text = text_query.get_mut(children[0]).unwrap();
         match *interaction {
             Interaction::Pressed => match button.0 {
                 PauseScreenButton::ResumeGame => {
@@ -183,8 +195,16 @@ fn pause_screen_interaction(
                     next_state.set(InGameState::None);
                 }
             },
-            Interaction::Hovered => {}
-            Interaction::None => {}
+            Interaction::Hovered => {
+                *color = Color::RED.into();
+                border_color.0 = Color::WHITE;
+                text.sections[0].style.color = Color::WHITE;
+            }
+            Interaction::None => {
+                *color = Color::WHITE.into();
+                border_color.0 = Color::RED;
+                text.sections[0].style.color = Color::RED;
+            }
         }
     }
 }
@@ -192,8 +212,7 @@ fn pause_screen_interaction(
 fn show_pause_screen(
     mut commands: Commands,
     safe_ui: Query<Entity, With<crate::SafeUi>>,
-    mut player: Query<&mut Player>,
-    mut generator: ResMut<generate::Generator>,
+    player: Query<&mut Player>,
 ) {
     commands
         .spawn(NodeBundle {
@@ -207,269 +226,268 @@ fn show_pause_screen(
             ..default()
         })
         .insert(PauseScreen);
-    if let player = player.single() {
-        let safe_ui = safe_ui.get_single();
-        if let Ok(safe_ui) = safe_ui {
-            let mut safe_ui = commands.entity(safe_ui);
-            safe_ui.with_children(|safe_ui| {
-                safe_ui
-                    .spawn(NodeBundle {
-                        style: Style {
-                            position_type: PositionType::Absolute,
-                            width: Val::Percent(100.),
-                            height: Val::Percent(100.),
-                            display: Display::Grid,
-                            column_gap:Val::Px(10.),
-                            grid_template_columns: vec![
-                                GridTrack::auto(),
-                                GridTrack::auto(),
-                                GridTrack::auto(),
-                                GridTrack::fr(1.),
-                            ],
+    let player = player.single();
+    let safe_ui = safe_ui.get_single();
+    if let Ok(safe_ui) = safe_ui {
+        let mut safe_ui = commands.entity(safe_ui);
+        safe_ui.with_children(|safe_ui| {
+            safe_ui
+                .spawn(NodeBundle {
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        width: Val::Percent(100.),
+                        height: Val::Percent(100.),
+                        display: Display::Grid,
+                        column_gap: Val::Px(10.),
+                        grid_template_columns: vec![
+                            GridTrack::auto(),
+                            GridTrack::auto(),
+                            GridTrack::auto(),
+                            GridTrack::fr(1.),
+                        ],
 
-                            ..default()
-                        },
-                        z_index: ZIndex::Global(10),
                         ..default()
-                    })
-                    .insert(PauseScreen)
-                    .with_children(|pause_screen| {
-                        pause_screen
-                            .spawn(crate::menu::get_main_menu_menu_bundle())
-                            .with_children(|parent| {
-                                parent.new_menu_button(
-                                    "Resume",
-                                    PauseScreenButtonComponent(PauseScreenButton::ResumeGame),
-                                );
-                                parent.new_menu_button(
-                                    "Quit",
-                                    PauseScreenButtonComponent(PauseScreenButton::ExitGame),
-                                );
-                            });
-                        pause_screen
-                            .spawn(NodeBundle {
-                                style: Style {
-                                    display: Display::Flex,
-                                    flex_direction: FlexDirection::Column,
-                                    row_gap:Val::Px(5.),
-                                    ..default()
-                                },
+                    },
+                    z_index: ZIndex::Global(10),
+                    ..default()
+                })
+                .insert(PauseScreen)
+                .with_children(|pause_screen| {
+                    pause_screen
+                        .spawn(crate::menu::get_main_menu_menu_bundle())
+                        .with_children(|parent| {
+                            parent.new_menu_button(
+                                "Resume",
+                                PauseScreenButtonComponent(PauseScreenButton::ResumeGame),
+                            );
+                            parent.new_menu_button(
+                                "Quit",
+                                PauseScreenButtonComponent(PauseScreenButton::ExitGame),
+                            );
+                        });
+                    pause_screen
+                        .spawn(NodeBundle {
+                            style: Style {
+                                display: Display::Flex,
+                                flex_direction: FlexDirection::Column,
+                                row_gap: Val::Px(5.),
                                 ..default()
-                            })
-                            .with_children(|skill_list| {
-                                if player.jump_skill.tier >= UpgradeLevel::None {
-                                    skill_list
-                                        .spawn(NodeBundle {
-                                            style: Style {
-                                                display: Display::Flex,
-                                                flex_direction: FlexDirection::Column,
-                                                border: UiRect::all(Val::Px(2.)),
-                                                padding: UiRect::all(Val::Px(5.)),
-                                                ..default()
-                                            },
-                                            background_color: Color::BLACK.into(),
-                                            border_color: player.jump_skill.tier.color().into(),
-                                            ..default()
-                                        })
-                                        .with_children(|jump_skill| {
-                                            jump_skill.spawn(NodeBundle::default()).with_children(
-                                                |title| {
-                                                    title.spawn(TextBundle::from_section(
-                                                        player.jump_skill.name(),
-                                                        TextStyle {
-                                                            font_size: 24.,
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                            jump_skill.spawn(NodeBundle::default()).with_children(
-                                                |tier| {
-                                                    tier.spawn(TextBundle::from_section(
-                                                        player.jump_skill.tier.name(),
-                                                        TextStyle {
-                                                            font_size: 22.,
-                                                            color: player.jump_skill.tier.color(),
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                            jump_skill.spawn(NodeBundle::default()).with_children(
-                                                |tier| {
-                                                    tier.spawn(TextBundle::from_section(
-                                                        player.jump_skill.description(),
-                                                        TextStyle {
-                                                            font_size: 22.,
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                        });
-                                }
-                                if player.dash_skill.tier > UpgradeLevel::None {
-                                    skill_list
-                                        .spawn(NodeBundle {
-                                            style: Style {
-                                                display: Display::Flex,
-                                                flex_direction: FlexDirection::Column,
-                                                border: UiRect::all(Val::Px(2.)),
-                                                padding: UiRect::all(Val::Px(5.)),
-                                                ..default()
-                                            },
-                                            background_color: Color::BLACK.into(),
-                                            border_color: player.dash_skill.tier.color().into(),
-                                            ..default()
-                                        })
-                                        .with_children(|dash_skill| {
-                                            dash_skill.spawn(NodeBundle::default()).with_children(
-                                                |title| {
-                                                    title.spawn(TextBundle::from_section(
-                                                        player.dash_skill.name(),
-                                                        TextStyle {
-                                                            font_size: 24.,
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                            dash_skill.spawn(NodeBundle::default()).with_children(
-                                                |tier| {
-                                                    tier.spawn(TextBundle::from_section(
-                                                        player.dash_skill.tier.name(),
-                                                        TextStyle {
-                                                            font_size: 22.,
-                                                            color: player.dash_skill.tier.color(),
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                            dash_skill.spawn(NodeBundle::default()).with_children(
-                                                |tier| {
-                                                    tier.spawn(TextBundle::from_section(
-                                                        player.dash_skill.description(),
-                                                        TextStyle {
-                                                            font_size: 22.,
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                        });
-                                }
-                                if player.glide_skill.tier > UpgradeLevel::None {
-                                    skill_list
-                                        .spawn(NodeBundle {
-                                            style: Style {
-                                                display: Display::Flex,
-                                                flex_direction: FlexDirection::Column,
-                                                border: UiRect::all(Val::Px(2.)),
-                                                padding: UiRect::all(Val::Px(5.)),
-                                                ..default()
-                                            },
-                                            border_color: player.glide_skill.tier.color().into(),
-                                            background_color: Color::BLACK.into(),
-                                            ..default()
-                                        })
-                                        .with_children(|glide_skill| {
-                                            glide_skill.spawn(NodeBundle::default()).with_children(
-                                                |title| {
-                                                    title.spawn(TextBundle::from_section(
-                                                        player.glide_skill.name(),
-                                                        TextStyle {
-                                                            font_size: 24.,
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                            glide_skill.spawn(NodeBundle::default()).with_children(
-                                                |tier| {
-                                                    tier.spawn(TextBundle::from_section(
-                                                        player.glide_skill.tier.name(),
-                                                        TextStyle {
-                                                            font_size: 22.,
-                                                            color: player.glide_skill.tier.color(),
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                            glide_skill.spawn(NodeBundle::default()).with_children(
-                                                |tier| {
-                                                    tier.spawn(TextBundle::from_section(
-                                                        player.glide_skill.description(),
-                                                        TextStyle {
-                                                            font_size: 22.,
-                                                            ..default()
-                                                        },
-                                                    ));
-                                                },
-                                            );
-                                        });
-                                }
-                            });
-                        pause_screen
-                            .spawn(NodeBundle {
-                                style: Style {
-                                    display: Display::Flex,
-                                    flex_direction: FlexDirection::Column,
-                                    row_gap:Val::Px(5.),
-                                    ..default()
-                                },
-                                ..default()
-                            })
-                            .with_children(|stat_list| {
-                                stat_list
+                            },
+                            ..default()
+                        })
+                        .with_children(|skill_list| {
+                            if player.jump_skill.tier >= UpgradeLevel::None {
+                                skill_list
                                     .spawn(NodeBundle {
                                         style: Style {
+                                            display: Display::Flex,
+                                            flex_direction: FlexDirection::Column,
+                                            border: UiRect::all(Val::Px(2.)),
                                             padding: UiRect::all(Val::Px(5.)),
                                             ..default()
                                         },
                                         background_color: Color::BLACK.into(),
+                                        border_color: player.jump_skill.tier.color().into(),
                                         ..default()
                                     })
-                                    .with_children(|speed_stat| {
-                                        speed_stat.spawn(TextBundle::from_section(
-                                            format!(
-                                                "Max Speed: {}mph",
-                                                player.max_speed() * SPEED_DISPLAY
-                                            ),
-                                            TextStyle {
-                                                font_size: 22.,
-                                                ..default()
+                                    .with_children(|jump_skill| {
+                                        jump_skill.spawn(NodeBundle::default()).with_children(
+                                            |title| {
+                                                title.spawn(TextBundle::from_section(
+                                                    player.jump_skill.name(),
+                                                    TextStyle {
+                                                        font_size: 24.,
+                                                        ..default()
+                                                    },
+                                                ));
                                             },
-                                        ));
+                                        );
+                                        jump_skill.spawn(NodeBundle::default()).with_children(
+                                            |tier| {
+                                                tier.spawn(TextBundle::from_section(
+                                                    player.jump_skill.tier.name(),
+                                                    TextStyle {
+                                                        font_size: 22.,
+                                                        color: player.jump_skill.tier.color(),
+                                                        ..default()
+                                                    },
+                                                ));
+                                            },
+                                        );
+                                        jump_skill.spawn(NodeBundle::default()).with_children(
+                                            |tier| {
+                                                tier.spawn(TextBundle::from_section(
+                                                    player.jump_skill.description(),
+                                                    TextStyle {
+                                                        font_size: 22.,
+                                                        ..default()
+                                                    },
+                                                ));
+                                            },
+                                        );
                                     });
-                                stat_list
+                            }
+                            if player.dash_skill.tier > UpgradeLevel::None {
+                                skill_list
                                     .spawn(NodeBundle {
                                         style: Style {
+                                            display: Display::Flex,
+                                            flex_direction: FlexDirection::Column,
+                                            border: UiRect::all(Val::Px(2.)),
                                             padding: UiRect::all(Val::Px(5.)),
                                             ..default()
                                         },
                                         background_color: Color::BLACK.into(),
+                                        border_color: player.dash_skill.tier.color().into(),
                                         ..default()
                                     })
-                                    .with_children(|jump_stat| {
-                                        jump_stat.spawn(TextBundle::from_section(
-                                            format!("Jump Power: {}", player.jump_power()),
-                                            TextStyle {
-                                                font_size: 22.,
-                                                ..default()
+                                    .with_children(|dash_skill| {
+                                        dash_skill.spawn(NodeBundle::default()).with_children(
+                                            |title| {
+                                                title.spawn(TextBundle::from_section(
+                                                    player.dash_skill.name(),
+                                                    TextStyle {
+                                                        font_size: 24.,
+                                                        ..default()
+                                                    },
+                                                ));
                                             },
-                                        ));
+                                        );
+                                        dash_skill.spawn(NodeBundle::default()).with_children(
+                                            |tier| {
+                                                tier.spawn(TextBundle::from_section(
+                                                    player.dash_skill.tier.name(),
+                                                    TextStyle {
+                                                        font_size: 22.,
+                                                        color: player.dash_skill.tier.color(),
+                                                        ..default()
+                                                    },
+                                                ));
+                                            },
+                                        );
+                                        dash_skill.spawn(NodeBundle::default()).with_children(
+                                            |tier| {
+                                                tier.spawn(TextBundle::from_section(
+                                                    player.dash_skill.description(),
+                                                    TextStyle {
+                                                        font_size: 22.,
+                                                        ..default()
+                                                    },
+                                                ));
+                                            },
+                                        );
                                     });
-                            });
-                    });
-            });
-        }
+                            }
+                            if player.glide_skill.tier > UpgradeLevel::None {
+                                skill_list
+                                    .spawn(NodeBundle {
+                                        style: Style {
+                                            display: Display::Flex,
+                                            flex_direction: FlexDirection::Column,
+                                            border: UiRect::all(Val::Px(2.)),
+                                            padding: UiRect::all(Val::Px(5.)),
+                                            ..default()
+                                        },
+                                        border_color: player.glide_skill.tier.color().into(),
+                                        background_color: Color::BLACK.into(),
+                                        ..default()
+                                    })
+                                    .with_children(|glide_skill| {
+                                        glide_skill.spawn(NodeBundle::default()).with_children(
+                                            |title| {
+                                                title.spawn(TextBundle::from_section(
+                                                    player.glide_skill.name(),
+                                                    TextStyle {
+                                                        font_size: 24.,
+                                                        ..default()
+                                                    },
+                                                ));
+                                            },
+                                        );
+                                        glide_skill.spawn(NodeBundle::default()).with_children(
+                                            |tier| {
+                                                tier.spawn(TextBundle::from_section(
+                                                    player.glide_skill.tier.name(),
+                                                    TextStyle {
+                                                        font_size: 22.,
+                                                        color: player.glide_skill.tier.color(),
+                                                        ..default()
+                                                    },
+                                                ));
+                                            },
+                                        );
+                                        glide_skill.spawn(NodeBundle::default()).with_children(
+                                            |tier| {
+                                                tier.spawn(TextBundle::from_section(
+                                                    player.glide_skill.description(),
+                                                    TextStyle {
+                                                        font_size: 22.,
+                                                        ..default()
+                                                    },
+                                                ));
+                                            },
+                                        );
+                                    });
+                            }
+                        });
+                    pause_screen
+                        .spawn(NodeBundle {
+                            style: Style {
+                                display: Display::Flex,
+                                flex_direction: FlexDirection::Column,
+                                row_gap: Val::Px(5.),
+                                ..default()
+                            },
+                            ..default()
+                        })
+                        .with_children(|stat_list| {
+                            stat_list
+                                .spawn(NodeBundle {
+                                    style: Style {
+                                        padding: UiRect::all(Val::Px(5.)),
+                                        ..default()
+                                    },
+                                    background_color: Color::BLACK.into(),
+                                    ..default()
+                                })
+                                .with_children(|speed_stat| {
+                                    speed_stat.spawn(TextBundle::from_section(
+                                        format!(
+                                            "Max Speed: {}mph",
+                                            player.max_speed() * SPEED_DISPLAY
+                                        ),
+                                        TextStyle {
+                                            font_size: 22.,
+                                            ..default()
+                                        },
+                                    ));
+                                });
+                            stat_list
+                                .spawn(NodeBundle {
+                                    style: Style {
+                                        padding: UiRect::all(Val::Px(5.)),
+                                        ..default()
+                                    },
+                                    background_color: Color::BLACK.into(),
+                                    ..default()
+                                })
+                                .with_children(|jump_stat| {
+                                    jump_stat.spawn(TextBundle::from_section(
+                                        format!("Jump Power: {}", player.jump_power()),
+                                        TextStyle {
+                                            font_size: 22.,
+                                            ..default()
+                                        },
+                                    ));
+                                });
+                        });
+                });
+        });
     }
 }
 fn hide_pause_screen(mut commands: Commands, pause_screens: Query<Entity, With<PauseScreen>>) {
     for pause_screen in pause_screens.iter() {
-        let mut pause_screen = commands.entity(pause_screen);
+        let pause_screen = commands.entity(pause_screen);
         pause_screen.despawn_recursive();
     }
 }
@@ -791,7 +809,7 @@ fn glide_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
 struct Glider;
 
 fn pause_button(
-    mut query: Query<&ActionState<input::Action>>,
+    query: Query<&ActionState<input::Action>>,
     mut next_state: ResMut<NextState<InGameState>>,
 ) {
     let action_state = query.single();
@@ -801,7 +819,7 @@ fn pause_button(
 }
 
 fn resume_button(
-    mut query: Query<&ActionState<input::Action>>,
+    query: Query<&ActionState<input::Action>>,
     mut next_state: ResMut<NextState<InGameState>>,
 ) {
     let action_state = query.single();
