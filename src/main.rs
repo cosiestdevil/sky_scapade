@@ -219,6 +219,7 @@ fn show_pause_screen(
                             width: Val::Percent(100.),
                             height: Val::Percent(100.),
                             display: Display::Grid,
+                            column_gap:Val::Px(10.),
                             grid_template_columns: vec![
                                 GridTrack::auto(),
                                 GridTrack::auto(),
@@ -250,6 +251,7 @@ fn show_pause_screen(
                                 style: Style {
                                     display: Display::Flex,
                                     flex_direction: FlexDirection::Column,
+                                    row_gap:Val::Px(5.),
                                     ..default()
                                 },
                                 ..default()
@@ -414,6 +416,7 @@ fn show_pause_screen(
                                 style: Style {
                                     display: Display::Flex,
                                     flex_direction: FlexDirection::Column,
+                                    row_gap:Val::Px(5.),
                                     ..default()
                                 },
                                 ..default()
