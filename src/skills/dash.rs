@@ -8,12 +8,13 @@ use leafwing_input_manager::action_state::ActionState;
 
 use crate::{input::*, AppState, InGameState};
 pub struct DashPlugin;
-
+#[derive(Component)]
+pub struct DashSkillDisplay;
 impl Plugin for DashPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (dash, dash_cooldown)
+            (dash, dash_cooldown,dash_skill_display)
                 .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
         );
     }
@@ -55,5 +56,19 @@ fn dash_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
                     Some(Timer::new(player.dash_skill.cooldown, TimerMode::Once));
             }
         }
+    }
+}
+fn dash_skill_display(
+    player: Query<&Player>,
+    mut dashses: Query<&mut Text, With<DashSkillDisplay>>,
+) {
+    let player = player.single();
+    if let Ok(mut dashses_text) = dashses.get_single_mut() {
+        let air = if player.dash_skill.air { " (Air)" } else { "" };
+        dashses_text.sections[0].value = format!(
+            "Dash: {}{}",
+            player.dash_skill.max_dash - player.used_dashes,
+            air
+        );
     }
 }
