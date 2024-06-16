@@ -114,7 +114,7 @@ fn main() {
     );
     app.add_plugins(skills::SkillPlugin);
     app.add_systems(
-        FixedUpdate,
+        Update,
         (
             generate_more_if_needed,
             level_upgrade,
@@ -845,13 +845,21 @@ fn move_player(
     });
     if action_state.pressed(&input::Action::Jump) {
         let air_jumps: usize = (player.jump_skill.max_jumps - 1).into();
-        controller.action(TnuaBuiltinJump {
+        
+        controller.action(skills::jump::TnuaBuiltinJump {
             height: player.jump_power(),
             allow_in_air: player.jump_skill.air
-                && air_actions_counter.air_count_for(TnuaBuiltinJump::NAME) <= air_jumps,
+                && air_actions_counter.air_count_for(skills::jump::TnuaBuiltinJump::NAME) <= air_jumps,
+            input_buffer_time:0.,
             ..default()
         });
     }
+    // if action_state.just_pressed(&input::Action::Jump){
+    //     info!("Jump Just Pressed");
+    // }
+    // else if action_state.just_released(&input::Action::Jump){
+    //     info!("Jump Just Released");
+    // }
 }
 
 #[derive(Component)]

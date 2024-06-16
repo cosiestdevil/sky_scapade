@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 mod dash;
 mod glide;
+pub mod jump;
 pub use glide::GlideSkillDisplay;
 pub use dash::DashSkillDisplay;
 pub struct SkillPlugin;
