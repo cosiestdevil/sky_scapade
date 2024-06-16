@@ -114,7 +114,7 @@ fn main() {
     );
     app.add_plugins(skills::SkillPlugin);
     app.add_systems(
-        FixedUpdate,
+        Update,
         (
             generate_more_if_needed,
             level_upgrade,
@@ -122,10 +122,7 @@ fn main() {
             killing_floor,
             update_score,
             update_player_position_display,
-            glide_cooldown,
-            jump_skill_display,
-            dash_skill_display,
-            slow_fall_skill_display,
+            jump_skill_display
         )
             .run_if(in_state(AppState::InGame).and_then(in_state(InGameState::Playing))),
     );
@@ -789,21 +786,7 @@ fn generate_more_if_needed(
     }
 }
 
-fn glide_cooldown(mut player: Query<&mut Player>, time: Res<Time>) {
-    let mut player = player.single_mut();
-    if let Some(ref mut cooldown) = player.glide_cooldown {
-        cooldown.tick(time.delta());
-        if cooldown.just_finished() {
-            player.used_glides -= 1;
-            if player.used_glides == 0 {
-                player.glide_cooldown = None;
-            } else {
-                player.glide_cooldown =
-                    Some(Timer::new(player.glide_skill.cooldown, TimerMode::Once));
-            }
-        }
-    }
-}
+
 
 #[derive(Component)]
 struct Glider;
@@ -829,22 +812,15 @@ fn resume_button(
 }
 
 fn move_player(
-    mut commands: Commands,
-    mut query: Query<(
-        Entity,
+    mut query: Query<(       
         &ActionState<input::Action>,
         &mut TnuaController,
         &mut input::Player,
         &mut TnuaSimpleAirActionsCounter,
     )>,
-    glider_query: Query<Entity, With<Glider>>,
-    asset_server: ResMut<AssetServer>,
-    time: Res<Time>,
 ) {
-    let (player_entity, action_state, mut controller, mut player, mut air_actions_counter) =
+    let (action_state, mut controller, mut player, mut air_actions_counter) =
         query.single_mut();
-    // Each action has a button-like state of its own that you can check
-    //println!("move_player {:?}",action_state);
     air_actions_counter.update(controller.as_mut());
     let mut direction = Vec3::ZERO;
     if action_state.pressed(&input::Action::Left) {
@@ -867,74 +843,23 @@ fn move_player(
         float_height: 2.,
         ..Default::default()
     });
-    if controller.is_airborne().unwrap()
-        && action_state.pressed(&input::Action::Glide)
-        && (match &player.glide_timer {
-            Some(timer) => !timer.finished(),
-            None => true,
-        })
-        && player.used_glides < player.glide_skill.max_uses
-    {
-        if action_state.just_pressed(&input::Action::Glide) {
-            player.used_glides += 1;
-            player.glide_timer = Some(Timer::new(player.glide_skill.max_duration, TimerMode::Once));
-            let mut player_entity = commands.entity(player_entity);
-            let glider_scene: Handle<Scene> = asset_server.load("glider.glb#Scene0");
-            player_entity.with_children(|child| {
-                child.spawn((
-                    Glider,
-                    SceneBundle {
-                        scene: glider_scene,
-                        transform: Transform::from_xyz(0., 2., 0.),
-                        ..default()
-                    },
-                ));
-            });
-        } else if let Some(timer) = &mut player.glide_timer {
-            timer.tick(time.delta());
-        }
-        if player.glide_cooldown.is_none() {
-            player.glide_cooldown = Some(Timer::new(player.glide_skill.cooldown, TimerMode::Once))
-        }
-        controller.action(TnuaBuiltinJump {
-            height: 0.1,
-            fall_extra_gravity: -5.,
-            allow_in_air: true,
-            ..default()
-        });
-    }
-    let mut glide_over = player.glide_timer.is_some()
-        && (!controller.is_airborne().unwrap()
-            || action_state.just_released(&input::Action::Glide)
-            || match &player.glide_timer {
-                Some(timer) => timer.finished(),
-                None => false,
-            });
     if action_state.pressed(&input::Action::Jump) {
         let air_jumps: usize = (player.jump_skill.max_jumps - 1).into();
-        glide_over = player.glide_timer.is_some();
-        controller.action(TnuaBuiltinJump {
+        
+        controller.action(skills::jump::TnuaBuiltinJump {
             height: player.jump_power(),
             allow_in_air: player.jump_skill.air
-                && air_actions_counter.air_count_for(TnuaBuiltinJump::NAME) <= air_jumps,
+                && air_actions_counter.air_count_for(skills::jump::TnuaBuiltinJump::NAME) <= air_jumps,
+            input_buffer_time:0.,
             ..default()
         });
     }
-
-    if glide_over {
-        player.glide_timer = None;
-        if let Ok(glider) = glider_query.get_single() {
-            commands.entity(glider).despawn_recursive();
-        }
-        if !action_state.pressed(&input::Action::Jump) {
-            controller.action(TnuaBuiltinJump {
-                height: 0.1,
-                fall_extra_gravity: 20.,
-                allow_in_air: true,
-                ..default()
-            });
-        }
-    }
+    // if action_state.just_pressed(&input::Action::Jump){
+    //     info!("Jump Just Pressed");
+    // }
+    // else if action_state.just_released(&input::Action::Jump){
+    //     info!("Jump Just Released");
+    // }
 }
 
 #[derive(Component)]
@@ -1006,12 +931,10 @@ fn killing_floor(
     }
 }
 
-#[derive(Component)]
-struct DashSkillDisplay;
+
 #[derive(Component)]
 struct JumpSkillDisplay;
-#[derive(Component)]
-struct GlideSkillDisplay;
+
 
 fn jump_skill_display(player: Query<&Player>, mut jumps: Query<&mut Text, With<JumpSkillDisplay>>) {
     let player = player.single();
@@ -1020,32 +943,8 @@ fn jump_skill_display(player: Query<&Player>, mut jumps: Query<&mut Text, With<J
     }
 }
 
-fn dash_skill_display(
-    player: Query<&Player>,
-    mut dashses: Query<&mut Text, With<DashSkillDisplay>>,
-) {
-    let player = player.single();
-    if let Ok(mut dashses_text) = dashses.get_single_mut() {
-        let air = if player.dash_skill.air { " (Air)" } else { "" };
-        dashses_text.sections[0].value = format!(
-            "Dash: {}{}",
-            player.dash_skill.max_dash - player.used_dashes,
-            air
-        );
-    }
-}
-fn slow_fall_skill_display(
-    player: Query<&Player>,
-    mut jumps: Query<&mut Text, With<GlideSkillDisplay>>,
-) {
-    let player = player.single();
-    if let Ok(mut jumps_text) = jumps.get_single_mut() {
-        jumps_text.sections[0].value = format!(
-            "Glide: {}",
-            player.glide_skill.max_uses - player.used_glides
-        );
-    }
-}
+
+
 type StartLevelAssets<'a> = (
     Res<'a, AssetServer>,
     ResMut<'a, Assets<Image>>,
@@ -1174,7 +1073,7 @@ fn start_level(
                                 ..default()
                             },
                         ),
-                        DashSkillDisplay,
+                        skills::DashSkillDisplay,
                     ));
                     skills.spawn((
                         TextBundle::from_section(
@@ -1196,7 +1095,7 @@ fn start_level(
                                 ..default()
                             },
                         ),
-                        GlideSkillDisplay,
+                        skills::GlideSkillDisplay,
                     ));
                 });
             });
